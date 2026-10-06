@@ -5,7 +5,7 @@ import { saveHistory, renderSidebar } from './sidebar.js';
 import { handlePrunePayload } from './prune.js';
 import { handleExecutionPayload } from './execution.js';
 import { handleSelectPayload } from './selectPayload.js';
-import { fetchQuota, isStreamingModel } from './models.js';
+import { isStreamingModel } from './models.js';
 import { extractReasoningDelta, splitInlineThinking, getInlineTags, buildReplayHistory } from './reasoning.js';
 import { renderChatNav, scrollToMessageTop } from './chatNav.js';
 import {
@@ -35,7 +35,7 @@ export function updateHeaderTitle() {
         titleEl.textContent = title;
         titleEl.title = title;
     }
-    document.title = `${title} - Copilot API`;
+    document.title = `${title} - CombineWebUI`;
 }
 
 export function renderChat(preserveScroll = false) {
@@ -427,7 +427,6 @@ function finishRun(conv, index, vid) {
     renderChat(true);
     setProcessingUI(false);
     updateTokenCount();
-    fetchQuota();
     if (onScreen) scheduleScrollToReplyTop(conv, index);
 }
 

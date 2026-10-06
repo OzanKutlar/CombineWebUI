@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1d2021">
-    <title>Copilot API - Raw Chat</title>
+    <title>CombineWebUI</title>
     <script>
         // Runs before any stylesheet parses, so a light theme never flashes
         // dark on load. The storage key is duplicated as a literal rather than
@@ -108,7 +108,7 @@
         <header class="bg-gb-bg border-b border-gb-bgLight2 px-6 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center shrink-0 z-10 shadow-sm gap-4">
             <div class="flex items-center gap-3 font-bold text-gb-fgLightest text-lg min-w-0 max-w-md">
                 <img src="/static/icons/logo.svg" alt="App Logo" class="w-7 h-7 rounded-md object-contain shrink-0 shadow-sm">
-                <span id="header-chat-title" class="truncate text-base sm:text-lg font-bold" title="Current Chat">Copilot API Chat</span>
+                <span id="header-chat-title" class="truncate text-base sm:text-lg font-bold" title="Current Chat">CombineWebUI</span>
             </div>
             <div class="flex items-center gap-4 sm:gap-6 w-full sm:w-auto justify-between sm:justify-end flex-wrap sm:flex-nowrap">
                 <div class="flex items-center gap-2 self-end mb-0.5">
@@ -128,7 +128,6 @@
                 <div class="flex flex-col">
                     <label class="text-xs text-gb-fgDark font-semibold mb-1 uppercase tracking-wider flex justify-between">
                         Model Selection
-                        <span id="quota-display" class="text-gb-blueAccent font-mono ml-4">Fetching quota...</span>
                     </label>
                     <button id="model-select-btn" class="bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent focus:border-gb-blueAccent flex w-full sm:w-64 p-2 shadow-sm font-medium outline-none justify-between items-center transition-colors hover:bg-gb-bgLight1">
                         <span id="selected-model-text" class="truncate">Loading models...</span>
@@ -219,10 +218,7 @@
             <div class="flex flex-col md:flex-row flex-1 min-h-0">
                 <nav id="settings-tabs" class="settings-tabs scrollbar-hide" aria-label="Settings categories">
                     <button type="button" class="settings-tab settings-tab-active" data-panel="endpoints">
-                        <i data-lucide="server"></i> Local Models
-                    </button>
-                    <button type="button" class="settings-tab" data-panel="generation">
-                        <i data-lucide="sliders-horizontal"></i> Generation
+                        <i data-lucide="server"></i> Endpoints
                     </button>
                     <button type="button" class="settings-tab" data-panel="display">
                         <i data-lucide="eye"></i> Display
@@ -239,43 +235,14 @@
 
                     <section class="settings-panel settings-panel-active" data-panel="endpoints">
                         <div class="px-6 pt-6 pb-3 shrink-0 border-b border-gb-bgLight2">
-                            <h3 class="text-md font-bold text-gb-fgLightest">Custom OpenAI Endpoints</h3>
-                            <p class="text-xs text-gb-fgDark mt-1.5 leading-relaxed">Point the proxy to local or third-party servers compatible with the OpenAI API format (e.g., Ollama, vLLM, LM Studio). Using custom endpoints consumes 0 Copilot credits.</p>
+                            <h3 class="text-md font-bold text-gb-fgLightest">OpenAI-Compatible Endpoints</h3>
+                            <p class="text-xs text-gb-fgDark mt-1.5 leading-relaxed">Every model in the picker comes from one of these servers (e.g. copilot-api, Ollama, vLLM, LM Studio). Models whose endpoint reports a premium multiplier are treated as metered.</p>
                         </div>
                         <div class="px-6 py-5 overflow-y-auto scrollbar-hide flex-1">
                             <div id="endpoints-list" class="flex flex-col gap-4"></div>
                             <button id="add-endpoint-btn" class="mt-4 bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-fgLight text-sm font-semibold py-2 px-4 rounded border border-gb-bgLight3 transition-colors flex items-center gap-2">
                                 <i data-lucide="plus" class="w-4 h-4"></i> Add Endpoint
                             </button>
-                        </div>
-                    </section>
-
-                    <section class="settings-panel" data-panel="generation">
-                        <div class="px-6 pt-6 pb-3 shrink-0 border-b border-gb-bgLight2">
-                            <h3 class="text-md font-bold text-gb-fgLightest">Thinking / Reasoning Defaults</h3>
-                            <p class="text-xs text-gb-fgDark mt-1.5 leading-relaxed">Controls the reasoning budget sent with requests to models whose id matches one of the enabled keywords.</p>
-                        </div>
-                        <div class="px-6 py-5 overflow-y-auto scrollbar-hide flex-1">
-                            <div class="flex flex-col gap-4 max-w-2xl">
-                                <div>
-                                    <label class="text-xs text-gb-fgDark font-semibold uppercase">Enabled Keywords (comma separated)</label>
-                                    <input type="text" id="setting-thinking-keywords" class="w-full bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-3 py-2 mt-1">
-                                </div>
-                                <div class="flex flex-col sm:flex-row gap-4">
-                                    <div class="flex-1">
-                                        <label class="text-xs text-gb-fgDark font-semibold uppercase">Max Completion Tokens</label>
-                                        <input type="number" id="setting-thinking-max-comp" class="w-full bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-3 py-2 mt-1">
-                                    </div>
-                                    <div class="flex-1">
-                                        <label class="text-xs text-gb-fgDark font-semibold uppercase">Budget Tokens</label>
-                                        <input type="number" id="setting-thinking-budget" class="w-full bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-3 py-2 mt-1">
-                                    </div>
-                                </div>
-                                <div class="flex items-center gap-2 mt-1">
-                                    <input type="checkbox" id="setting-thinking-unlimited" class="w-4 h-4 rounded border-gb-bgLight2 bg-gb-bgDarkest text-gb-blueAccent focus:ring-gb-blueAccent cursor-pointer">
-                                    <label class="text-sm text-gb-fgLight cursor-pointer select-none" for="setting-thinking-unlimited">Unlimited Budget (Sets budget = max completion tokens)</label>
-                                </div>
-                            </div>
                         </div>
                     </section>
 
@@ -685,7 +652,7 @@
                     </div>
                     <span id="model-modal-cost-warning" class="hidden flex items-center gap-1.5 text-[11px] font-semibold text-gb-redAccent bg-gb-red/20 border border-gb-red/30 rounded px-2 py-1 max-w-xs">
                         <i data-lucide="alert-triangle" class="w-3.5 h-3.5 shrink-0"></i>
-                        <span class="leading-tight">Copilot model: each Auto Name run costs one premium interaction per chat.</span>
+                        <span class="leading-tight">Metered model: each Auto Name run consumes upstream credits per chat.</span>
                     </span>
                 </div>
                 <div class="flex items-center gap-4">

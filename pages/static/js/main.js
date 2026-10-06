@@ -3,7 +3,7 @@ import { initRealtimeSync } from './sync.js';
 import { initTheme, applyTheme } from './theme.js';
 import { applyActiveTokenLimit, updateTokenCount } from './tokens.js';
 import { wireConfirmModal, showConfirmModal } from './modals.js';
-import { fetchModels, fetchQuota, openModelModal, closeModelModal, toggleShowHiddenModels } from './models.js';
+import { fetchModels, openModelModal, closeModelModal, toggleShowHiddenModels } from './models.js';
 import { openSettingsModal, closeSettingsModal, addEndpoint, addProviderGroup, saveSettings } from './settings.js';
 import { renderSidebar, initConversations, createNewChat, createNewFolder, saveConversations, startAutoNaming, startAutoFolder, setSidebarViewMode } from './sidebar.js';
 import { wireAutoFolderModal, closeAutoFolderModal } from './autoFolderModal.js';
@@ -216,7 +216,6 @@ async function initializeApp() {
     wireEvents();
 
     await fetchModels();
-    fetchQuota();
 
     renderSidebar();
     renderChat();

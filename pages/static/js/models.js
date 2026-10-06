@@ -66,7 +66,7 @@ export function renderAutoNameControls() {
     }
 
     modelBtn.title = model
-        ? 'Naming & foldering model: ' + model.id + (costly ? ' (consumes Copilot premium credits)' : ' (custom endpoint, 0 credits)')
+        ? 'Naming & foldering model: ' + model.id + (costly ? ' (metered endpoint, consumes credits)' : ' (unmetered endpoint)')
         : 'Select the model used to auto-name and auto-folder chats';
 
     const busy = store.isAutoNaming === true;
@@ -94,9 +94,14 @@ export function updateSelectedModelUI() {
     const btnText = document.getElementById('selected-model-text');
     if (!btnText) return;
     const model = store.allModels.find(m => m.id === store.selectedModel);
-    btnText.textContent = model
-        ? `${model.id} (${model.multiplier_label || '1x'})`
-        : 'Select a model...';
+    if (!model) {
+        btnText.textContent = 'Select a model...';
+        return;
+    }
+    // Only metered models carry a multiplier label.
+    btnText.textContent = model.multiplier_label
+        ? `${model.id} (${model.multiplier_label})`
+        : model.id;
 }
 
 export async function fetchModels() {
@@ -419,31 +424,4 @@ export function closeModelModal() {
     box.classList.add('translate-y-8');
 }
 
-export async function fetchQuota() {
-    const quotaDisplay = document.getElementById('quota-display');
-    if (!quotaDisplay) return;
-    try {
-        const res = await fetch('/usage');
-        if (!res.ok) throw new Error('Quota fetch failed');
-        const data = await res.json();
-        const snapshots = data.quota_snapshots || {};
-        const chat = snapshots.chat;
-        const comp = snapshots.completions;
 
-        const text = [];
-        if (chat) {
-            const used = chat.unlimited ? '\u221E' : chat.entitlement - chat.remaining;
-            const total = chat.unlimited ? '\u221E' : chat.entitlement;
-            text.push(`Chat: ${used}/${total}`);
-        }
-        if (comp) {
-            const used = comp.unlimited ? '\u221E' : comp.entitlement - comp.remaining;
-            const total = comp.unlimited ? '\u221E' : comp.entitlement;
-            text.push(`Comp: ${used}/${total}`);
-        }
-        quotaDisplay.textContent = text.join(' | ') || 'No quota info';
-    } catch (e) {
-        console.error(e);
-        quotaDisplay.textContent = 'Quota unavailable';
-    }
-}

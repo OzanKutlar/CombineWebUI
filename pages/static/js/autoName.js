@@ -46,12 +46,14 @@ export function getAutoNameCandidates() {
 }
 
 /**
- * True when the model is served by a custom endpoint, i.e. costs 0 Copilot
- * credits. Prefers the backend's explicit is_custom flag; only falls back to
- * the old provider-id heuristic when the flag is absent, i.e. an older server.
+ * True when using the model costs nothing upstream. Prefers the backend's
+ * explicit is_metered flag (set when the endpoint reports a premium
+ * multiplier, as copilot-api does), then is_custom, and only falls back to
+ * the provider-id heuristic when neither is present.
  */
 export function isCustomEndpointModel(model) {
     if (!model) return false;
+    if (typeof model.is_metered === 'boolean') return !model.is_metered;
     if (typeof model.is_custom === 'boolean') return model.is_custom;
     const pid = model.provider_id || 'other';
     return BUILTIN_PROVIDER_IDS.indexOf(pid) === -1;

@@ -20,7 +20,7 @@ let themeAtOpen = null;
 let pendingTheme = null;
 
 // Category ids shared by the rail buttons (data-panel) and the panel sections.
-const SETTINGS_PANELS = ['endpoints', 'generation', 'display', 'providers', 'network'];
+const SETTINGS_PANELS = ['endpoints', 'display', 'providers', 'network'];
 const DEFAULT_SETTINGS_PANEL = 'endpoints';
 
 let activePanel = DEFAULT_SETTINGS_PANEL;
@@ -521,11 +521,6 @@ export async function openSettingsModal() {
         renderSettingsEndpoints();
         renderSettingsProviderGroups();
 
-        const thinking = currentSettings.thinking_defaults || {};
-        document.getElementById('setting-thinking-keywords').value = (thinking.enabled_keywords || []).join(', ');
-        document.getElementById('setting-thinking-max-comp').value = thinking.max_completion_tokens || 16384;
-        document.getElementById('setting-thinking-budget').value = thinking.budget_tokens || 4096;
-
         const prefs = store.thinkingPrefs || {};
         document.getElementById('setting-thinking-show').checked = prefs.show !== false;
         document.getElementById('setting-thinking-autoexpand').checked = prefs.autoExpand === true;
@@ -535,15 +530,6 @@ export async function openSettingsModal() {
         if (timeoutEl) {
             timeoutEl.value = currentSettings.non_stream_timeout || 240;
         }
-
-        const unlimitedEl = document.getElementById('setting-thinking-unlimited');
-        unlimitedEl.checked = thinking.unlimited || false;
-        unlimitedEl.onchange = (e) => {
-            const budgetEl = document.getElementById('setting-thinking-budget');
-            budgetEl.disabled = e.target.checked;
-            budgetEl.classList.toggle('opacity-50', e.target.checked);
-        };
-        unlimitedEl.dispatchEvent(new Event('change'));
     } catch (e) {
         console.error('Failed to load settings', e);
     }
@@ -595,13 +581,8 @@ export async function saveSettings() {
         }
     }
 
-    currentSettings.thinking_defaults = {
-        enabled_keywords: document.getElementById('setting-thinking-keywords').value
-            .split(',').map(s => s.trim()).filter(Boolean),
-        max_completion_tokens: parseInt(document.getElementById('setting-thinking-max-comp').value, 10) || 16384,
-        budget_tokens: parseInt(document.getElementById('setting-thinking-budget').value, 10) || 4096,
-        unlimited: document.getElementById('setting-thinking-unlimited').checked
-    };
+    // Reasoning budgets are configured in copilot-api's own settings.json.
+    delete currentSettings.thinking_defaults;
 
     const timeoutInput = document.getElementById('setting-non-stream-timeout');
     if (timeoutInput) {
