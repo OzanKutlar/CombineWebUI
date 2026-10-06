@@ -1,0 +1,160 @@
+/* Theme token definitions.
+
+   Every colour in the app resolves through one of these custom properties.
+   Values are space-separated RGB triples rather than hex strings, because
+   that is the only form Tailwind's alpha modifiers can compose against:
+   `bg-gb-red/20` expands to `rgb(var(--gb-red) / 0.2)`, which requires the
+   variable to hold `204 36 29` and not `#cc241d`.
+
+   Adding a theme means adding one [data-theme="..."] block below and one
+   entry to THEMES in js/theme.js. Nothing else needs to change. */
+
+:root,
+[data-theme="dark"] {
+    color-scheme: dark;
+
+    /* Surfaces, darkest to lightest. */
+    --gb-bg-darkest: 29 32 33;
+    --gb-bg: 40 40 40;
+    --gb-bg-light-1: 60 56 54;
+    --gb-bg-light-2: 80 73 69;
+    --gb-bg-light-3: 102 92 84;
+
+    /* Text, dimmest to brightest. */
+    --gb-fg-dark: 168 153 132;
+    --gb-fg-medium: 213 196 161;
+    --gb-fg-light: 235 219 178;
+    --gb-fg-lightest: 251 241 199;
+
+    /* Accents. The non-Accent variant is the deeper fill; the Accent
+       variant is the brighter foreground/hover pair. */
+    --gb-red: 204 36 29;
+    --gb-red-accent: 251 73 52;
+    --gb-green: 152 151 26;
+    --gb-green-accent: 184 187 38;
+    --gb-blue: 69 133 136;
+    --gb-blue-accent: 131 165 152;
+    --gb-aqua-accent: 142 192 124;
+    --gb-purple: 177 98 134;
+    --gb-purple-accent: 211 134 155;
+    --gb-yellow-accent: 250 189 47;
+
+    /* Code and trace surfaces. Kept separate from --gb-bg-darkest because a
+       light theme needs these to stay visually distinct from the page, and
+       the darkest surface there is almost the same cream as the background. */
+    --gb-code-bg: 29 32 33;
+
+    /* Deterministic model-avatar palette, indexed 1..6 by a hash of the
+       model id. Kept as tokens so the pills repaint with the theme. */
+    --gb-avatar-1: 131 165 152;
+    --gb-avatar-2: 142 192 124;
+    --gb-avatar-3: 211 134 155;
+    --gb-avatar-4: 184 187 38;
+    --gb-avatar-5: 251 73 52;
+    --gb-avatar-6: 250 189 47;
+
+    /* Token counter chart series. */
+    --gb-chart-input: 131 165 152;
+    --gb-chart-output: 184 187 38;
+
+    /* Full shadow values rather than a colour, so a light theme can change
+       both the hue and the opacity in one place. */
+    --gb-shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+    --gb-shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="hard"] {
+    color-scheme: dark;
+
+    --gb-bg-darkest: 10 11 12;
+    --gb-bg: 15 17 18;
+    --gb-bg-light-1: 26 29 30;
+    --gb-bg-light-2: 42 46 47;
+    --gb-bg-light-3: 62 67 68;
+
+    /* Pulled down from the standard dark values: at near-black, full-strength
+       Gruvbox cream reads as glare rather than as text. */
+    --gb-fg-dark: 146 133 115;
+    --gb-fg-medium: 200 184 151;
+    --gb-fg-light: 228 213 173;
+    --gb-fg-lightest: 246 236 195;
+
+    --gb-red: 204 36 29;
+    --gb-red-accent: 251 73 52;
+    --gb-green: 152 151 26;
+    --gb-green-accent: 184 187 38;
+    --gb-blue: 69 133 136;
+    --gb-blue-accent: 131 165 152;
+    --gb-aqua-accent: 142 192 124;
+    --gb-purple: 177 98 134;
+    --gb-purple-accent: 211 134 155;
+    --gb-yellow-accent: 250 189 47;
+
+    --gb-code-bg: 10 11 12;
+
+    --gb-avatar-1: 131 165 152;
+    --gb-avatar-2: 142 192 124;
+    --gb-avatar-3: 211 134 155;
+    --gb-avatar-4: 184 187 38;
+    --gb-avatar-5: 251 73 52;
+    --gb-avatar-6: 250 189 47;
+
+    --gb-chart-input: 131 165 152;
+    --gb-chart-output: 184 187 38;
+
+    --gb-shadow-md: 0 8px 24px rgba(0, 0, 0, 0.6);
+    --gb-shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.68);
+}
+
+[data-theme="light"] {
+    color-scheme: light;
+
+    /* The surface ramp inverts: --gb-bg-darkest is the page background and
+       therefore the *lightest* value here, while --gb-bg-light-3 becomes the
+       strongest border. Every class keeps working unchanged. */
+    --gb-bg-darkest: 249 245 215;
+    --gb-bg: 251 241 199;
+    --gb-bg-light-1: 235 219 178;
+    --gb-bg-light-2: 213 196 161;
+    --gb-bg-light-3: 189 174 147;
+
+    --gb-fg-dark: 124 111 100;
+    --gb-fg-medium: 80 73 69;
+    --gb-fg-light: 60 56 54;
+    --gb-fg-lightest: 40 40 40;
+
+    /* Gruvbox light accents, which are darker than their dark-theme
+       counterparts so they stay legible against cream. */
+    --gb-red: 157 0 6;
+    --gb-red-accent: 204 36 29;
+    --gb-green: 121 116 14;
+    --gb-green-accent: 152 151 26;
+    --gb-blue: 69 133 136;
+    --gb-blue-accent: 7 102 120;
+    --gb-aqua-accent: 66 123 88;
+    --gb-purple: 143 63 113;
+    --gb-purple-accent: 177 98 134;
+    --gb-yellow-accent: 181 118 20;
+
+    --gb-code-bg: 242 229 188;
+
+    --gb-avatar-1: 7 102 120;
+    --gb-avatar-2: 66 123 88;
+    --gb-avatar-3: 143 63 113;
+    --gb-avatar-4: 121 116 14;
+    --gb-avatar-5: 157 0 6;
+    --gb-avatar-6: 181 118 20;
+
+    --gb-chart-input: 7 102 120;
+    --gb-chart-output: 121 116 14;
+
+    /* Warm brown rather than black: pure black shadow on cream reads as soot. */
+    --gb-shadow-md: 0 8px 24px rgba(124, 111, 100, 0.18);
+    --gb-shadow-lg: 0 10px 30px rgba(124, 111, 100, 0.24);
+}
+
+/* Covers the overscroll area, which sits outside <body> and so does not pick
+   up the body's Tailwind background class. */
+html {
+    background-color: rgb(var(--gb-bg-darkest));
+}

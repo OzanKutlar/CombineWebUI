@@ -1,0 +1,17 @@
+{
+  "name": "Copilot API Chat",
+  "short_name": "CopilotChat",
+  "description": "A raw chat interface and proxy proxying the Copilot API",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1d2021",
+  "theme_color": "#282828",
+  "icons": [
+    {
+      "src": "/static/icons/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

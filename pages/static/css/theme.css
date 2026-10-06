@@ -1,0 +1,1430 @@
+/* Component styles.
+
+   Every colour here resolves through a custom property defined in themes.css.
+   Never introduce a raw hex literal in this file: it would be invisible to
+   the theme switcher and would stay dark in light mode. */
+
+body {
+    font-family: "Inter", sans-serif;
+}
+
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+.prose-gruvbox {
+    --tw-prose-body: rgb(var(--gb-fg-light));
+    --tw-prose-headings: rgb(var(--gb-fg-lightest));
+    --tw-prose-lead: rgb(var(--gb-fg-medium));
+    --tw-prose-links: rgb(var(--gb-blue-accent));
+    --tw-prose-bold: rgb(var(--gb-fg-lightest));
+    --tw-prose-counters: rgb(var(--gb-fg-dark));
+    --tw-prose-bullets: rgb(var(--gb-fg-dark));
+    --tw-prose-hr: rgb(var(--gb-bg-light-2));
+    --tw-prose-quotes: rgb(var(--gb-fg-light));
+    --tw-prose-quote-borders: rgb(var(--gb-blue-accent));
+    --tw-prose-captions: rgb(var(--gb-fg-dark));
+    --tw-prose-code: rgb(var(--gb-aqua-accent));
+    --tw-prose-pre-code: rgb(var(--gb-fg-light));
+    --tw-prose-pre-bg: rgb(var(--gb-code-bg));
+    --tw-prose-th-borders: rgb(var(--gb-bg-light-2));
+    --tw-prose-td-borders: rgb(var(--gb-bg-light-1));
+    --tw-prose-invert-body: rgb(var(--gb-fg-light));
+    --tw-prose-invert-headings: rgb(var(--gb-fg-lightest));
+    --tw-prose-invert-lead: rgb(var(--gb-fg-medium));
+    --tw-prose-invert-links: rgb(var(--gb-blue-accent));
+    --tw-prose-invert-bold: rgb(var(--gb-fg-lightest));
+    --tw-prose-invert-counters: rgb(var(--gb-fg-dark));
+    --tw-prose-invert-bullets: rgb(var(--gb-fg-dark));
+    --tw-prose-invert-hr: rgb(var(--gb-bg-light-2));
+    --tw-prose-invert-quotes: rgb(var(--gb-fg-light));
+    --tw-prose-invert-quote-borders: rgb(var(--gb-blue-accent));
+    --tw-prose-invert-captions: rgb(var(--gb-fg-dark));
+    --tw-prose-invert-code: rgb(var(--gb-aqua-accent));
+    --tw-prose-invert-pre-code: rgb(var(--gb-fg-light));
+    --tw-prose-invert-pre-bg: rgb(var(--gb-code-bg));
+    --tw-prose-invert-th-borders: rgb(var(--gb-bg-light-2));
+    --tw-prose-invert-td-borders: rgb(var(--gb-bg-light-1));
+}
+
+.prose pre {
+    background-color: rgb(var(--gb-code-bg)) !important;
+    border: 1px solid rgb(var(--gb-bg-light-1));
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+    word-break: break-word !important;
+    overflow-x: hidden;
+}
+
+.prose code {
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+}
+
+.prose blockquote {
+    background: rgb(var(--gb-blue-accent) / 0.22);
+    border: 1px solid rgb(var(--gb-blue-accent) / 0.35);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+    color: rgb(var(--gb-fg-light));
+    font-style: normal;
+}
+
+.prose blockquote p:first-of-type::before,
+.prose blockquote p:last-of-type::after {
+    content: none !important;
+}
+
+.github-alert {
+    position: relative;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in-up {
+    animation: fadeInUp 0.3s ease-out forwards;
+}
+
+/* Touch devices cannot hover, so the action pill stays permanently visible */
+@media (hover: none) {
+    .msg-action-bar {
+        opacity: 1 !important;
+        pointer-events: auto !important;
+    }
+}
+
+/* Lift the whole message above its neighbours while its dropdown is open */
+.msg-action-wrapper.menu-open {
+    z-index: 30;
+}
+
+/* Collapsed prompt-scaffolding section bodies */
+.prompt-section-body {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    color: rgb(var(--gb-fg-medium));
+    background: rgb(var(--gb-bg));
+    border: 1px solid rgb(var(--gb-bg-light-2));
+    border-radius: 4px;
+    padding: 8px;
+    margin: 0;
+}
+
+/* Theme picker, rendered into the Display settings panel by settings.js. */
+.theme-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid rgb(var(--gb-bg-light-2));
+    background: rgb(var(--gb-bg-darkest));
+    color: rgb(var(--gb-fg-light));
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.theme-option:hover {
+    background: rgb(var(--gb-bg-light-1));
+    border-color: rgb(var(--gb-bg-light-3));
+}
+
+.theme-option:active {
+    transform: scale(0.995);
+}
+
+.theme-option-active {
+    border-color: rgb(var(--gb-blue-accent));
+    background: rgb(var(--gb-blue-accent) / 0.12);
+}
+
+.theme-option-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+
+.theme-option-label {
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: rgb(var(--gb-fg-lightest));
+}
+
+.theme-option-active .theme-option-label {
+    color: rgb(var(--gb-blue-accent));
+}
+
+.theme-option-desc {
+    font-size: 11px;
+    line-height: 1.4;
+    color: rgb(var(--gb-fg-dark));
+}
+
+.theme-swatches {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.theme-swatch {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    border: 1px solid rgb(var(--gb-bg-light-3));
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .theme-option {
+        transition: none !important;
+    }
+}
+
+/* Sidebar folder tree */
+.folder-children {
+    margin-left: 8px;
+    padding-left: 8px;
+    border-left: 1px solid rgb(var(--gb-bg-light-2));
+}
+
+.folder-children-wrapper {
+    display: grid;
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transition: grid-template-rows 220ms cubic-bezier(0.4, 0, 0.2, 1), opacity 180ms ease-in-out;
+}
+
+.folder-children-wrapper.collapsed {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.folder-children-inner {
+    overflow: hidden;
+    min-height: 0;
+}
+
+.folder-chevron-icon {
+    transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.folder-row {
+    transition: background-color 150ms ease, color 150ms ease, transform 150ms ease, border-color 150ms ease;
+}
+
+.folder-row:hover {
+    transform: translateX(2px);
+}
+
+.folder-row:active {
+    transform: scale(0.99);
+}
+
+/* Folder name reveal.
+
+   The sidebar list scrolls, so an in-flow expansion would be clipped at the
+   sidebar edge. The chip is therefore fixed-position and placed from JS, the
+   same escape hatch .popup-menu uses. Width animates from 0 to the measured
+   content width, which reads as the label unrolling to the right. */
+.folder-name-chip {
+    position: fixed;
+    z-index: 55;
+    display: flex;
+    align-items: center;
+    max-width: 0;
+    overflow: hidden;
+    pointer-events: none;
+    background: rgb(var(--gb-bg));
+    border: 1px solid rgb(var(--gb-bg-light-3));
+    border-radius: 8px;
+    box-shadow: var(--gb-shadow-lg);
+    opacity: 0;
+    will-change: max-width, opacity;
+    transition: max-width 260ms cubic-bezier(0.16, 1, 0.3, 1), opacity 160ms ease-out;
+}
+
+.folder-name-chip-open {
+    opacity: 1;
+}
+
+.folder-name-chip-inner {
+    padding: 6px 12px;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: rgb(var(--gb-fg-lightest));
+}
+
+/* The reveal is a legibility affordance, not decoration, so it still happens
+   under reduced motion. Only the animation is dropped. */
+@media (prefers-reduced-motion: reduce) {
+    .folder-name-chip {
+        transition-duration: 0ms;
+    }
+}
+
+/* No hover on touch, and the chip is pointer-events: none, so it would be an
+   unreachable artefact. The native title attribute covers those devices. */
+@media (hover: none) {
+    .folder-name-chip {
+        display: none;
+    }
+}
+
+/* Drag and drop */
+.drag-ghost {
+    opacity: 0.4 !important;
+    transform: scale(0.98);
+}
+
+.drop-target-active {
+    outline: 2px dashed rgb(var(--gb-aqua-accent)) !important;
+    outline-offset: -2px;
+    background-color: rgb(var(--gb-aqua-accent) / 0.12) !important;
+}
+
+.drop-target-root.drop-target-active {
+    background-color: rgb(var(--gb-aqua-accent) / 0.05) !important;
+    border-radius: 8px;
+}
+
+/* Thinking trace body. Typography comes from the shared `prose` classes so it
+   matches the assistant's answer; this rule only owns the container. */
+.thinking-body {
+    background: rgb(var(--gb-code-bg));
+    border-top: 1px solid rgb(var(--gb-bg-light-2));
+    border-left: 3px solid rgb(var(--gb-aqua-accent));
+    padding: 16px 18px;
+    margin: 0;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+/* Prose block margins would otherwise make the panel padding look uneven. */
+.thinking-body > :first-child {
+    margin-top: 0;
+}
+
+.thinking-body > :last-child {
+    margin-bottom: 0;
+}
+
+/* Fallback avatar for models with no provider logo. Colours are set inline
+   from a deterministic hash of the model id, as live rgb(var(--gb-avatar-n))
+   values so they follow the active theme. */
+.model-avatar-blob {
+    display: inline-flex;
+    align-items: center;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    text-transform: none;
+    padding: 4px 7px;
+    border-radius: 9999px;
+    border: 1px solid transparent;
+    max-width: 120px;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+/* Shared sidebar popup menu. Fixed so the sidebar's scroll container cannot
+   clip it. */
+.popup-menu {
+    position: fixed;
+    z-index: 60;
+    min-width: 210px;
+    max-width: 260px;
+    max-height: 320px;
+    overflow-y: auto;
+    background: rgb(var(--gb-bg));
+    border: 1px solid rgb(var(--gb-bg-light-3));
+    border-radius: 8px;
+    box-shadow: var(--gb-shadow-lg);
+    padding: 4px;
+}
+
+.popup-menu-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-align: left;
+    font-size: 13px;
+    line-height: 1.2;
+    padding: 8px 12px;
+    border-radius: 6px;
+    color: rgb(var(--gb-fg-light));
+    background: transparent;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.popup-menu-item:hover:not(:disabled) {
+    background: rgb(var(--gb-bg-light-1));
+    color: rgb(var(--gb-fg-lightest));
+}
+
+.popup-menu-item:active:not(:disabled) {
+    background: rgb(var(--gb-bg-light-2));
+}
+
+.popup-menu-item-danger {
+    color: rgb(var(--gb-red-accent));
+}
+
+.popup-menu-item-active {
+    background: rgb(var(--gb-bg-light-2));
+    color: rgb(var(--gb-fg-lightest));
+    font-weight: 600;
+}
+
+.popup-menu-item-disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+/* Execution payload & Prune card */
+.exec-file-row {
+    transition: background-color 0.15s ease;
+}
+
+.save-step-row {
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.exec-file-row:hover {
+    background: rgb(var(--gb-bg-darkest));
+}
+
+.exec-stat-add {
+    color: rgb(var(--gb-green-accent));
+    font-weight: 700;
+}
+
+.exec-stat-del {
+    color: rgb(var(--gb-red-accent));
+    font-weight: 700;
+}
+
+.search-highlight {
+    background-color: rgb(var(--gb-yellow-accent) / 0.35);
+    color: rgb(var(--gb-fg-lightest));
+    font-weight: 700;
+    padding: 1px 3px;
+    border-radius: 3px;
+}
+
+.file-partial-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    padding: 1px 6px;
+    border-radius: 9999px;
+    color: rgb(var(--gb-aqua-accent));
+    background: rgb(var(--gb-aqua-accent) / 0.13);
+    border: 1px solid rgb(var(--gb-aqua-accent) / 0.33);
+    width: fit-content;
+}
+
+/* Chat Navigation Rail */
+.chat-nav-rail {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 25;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 6px;
+    background: rgb(var(--gb-bg-darkest) / 0.88);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgb(var(--gb-bg-light-1));
+    border-radius: 9999px;
+    box-shadow: var(--gb-shadow-md);
+    user-select: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.chat-nav-step-btn {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    color: rgb(var(--gb-fg-dark));
+    background: transparent;
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.chat-nav-step-btn:hover {
+    background-color: rgb(var(--gb-bg-light-1));
+    color: rgb(var(--gb-fg-lightest));
+    transform: scale(1.1);
+}
+
+.chat-nav-step-btn:active {
+    transform: scale(0.95);
+}
+
+.chat-nav-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 65vh;
+    overflow-y: auto;
+    padding: 2px 0;
+}
+
+.chat-nav-tick {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    transition: all 0.15s ease;
+    cursor: pointer;
+}
+
+.chat-nav-tick svg {
+    width: 18px;
+    height: 18px;
+    stroke-width: 2.2;
+}
+
+.chat-nav-tick:hover {
+    transform: scale(1.1);
+    z-index: 2;
+}
+
+.chat-nav-tick-user {
+    color: rgb(var(--gb-blue-accent));
+    background: rgb(var(--gb-blue-accent) / 0.15);
+    border-color: rgb(var(--gb-blue-accent) / 0.3);
+}
+
+.chat-nav-tick-user:hover {
+    background: rgb(var(--gb-blue-accent) / 0.3);
+    color: rgb(var(--gb-fg-lightest));
+    border-color: rgb(var(--gb-blue-accent));
+}
+
+.chat-nav-tick-assistant {
+    color: rgb(var(--gb-aqua-accent));
+    background: rgb(var(--gb-aqua-accent) / 0.15);
+    border-color: rgb(var(--gb-aqua-accent) / 0.3);
+}
+
+.chat-nav-tick-assistant:hover {
+    background: rgb(var(--gb-aqua-accent) / 0.3);
+    color: rgb(var(--gb-fg-lightest));
+    border-color: rgb(var(--gb-aqua-accent));
+}
+
+.chat-nav-tick-error {
+    color: rgb(var(--gb-red-accent));
+    background: rgb(var(--gb-red-accent) / 0.15);
+    border-color: rgb(var(--gb-red-accent) / 0.3);
+}
+
+.chat-nav-tick-error:hover {
+    background: rgb(var(--gb-red-accent) / 0.3);
+    color: rgb(var(--gb-fg-lightest));
+    border-color: rgb(var(--gb-red-accent));
+}
+
+.chat-nav-tick.chat-nav-tick-active {
+    box-shadow: 0 0 0 2px rgb(var(--gb-fg-light));
+    transform: scale(1.08);
+    opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .chat-nav-tick, .chat-nav-step-btn, .chat-nav-rail {
+        transition: none !important;
+    }
+}
+
+/* Manual prune drawer.
+
+   The panel is translated off-screen in CSS rather than with a utility class so
+   the transform and its transition stay in one place and cannot be clobbered by
+   another transform utility landing on the same element. */
+.prune-drawer {
+    transform: translateX(100%);
+    transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform;
+}
+
+.prune-drawer-open {
+    transform: translateX(0);
+}
+
+.prune-chip {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 4px 10px;
+    border-radius: 9999px;
+    color: rgb(var(--gb-fg-dark));
+    background: rgb(var(--gb-bg-darkest));
+    border: 1px solid rgb(var(--gb-bg-light-1));
+    transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.prune-chip:hover {
+    color: rgb(var(--gb-fg-light));
+    border-color: rgb(var(--gb-bg-light-3));
+}
+
+.prune-chip-active {
+    color: rgb(var(--gb-bg-darkest));
+    background: rgb(var(--gb-blue-accent));
+    border-color: rgb(var(--gb-blue-accent));
+}
+
+.prune-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgb(var(--gb-bg-light-1));
+    background: rgb(var(--gb-bg-darkest));
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.prune-row:hover {
+    background: rgb(var(--gb-bg));
+    border-color: rgb(var(--gb-bg-light-2));
+}
+
+.prune-row-selected {
+    border-color: rgb(var(--gb-blue-accent));
+    background: rgb(var(--gb-blue-accent) / 0.10);
+}
+
+.prune-row-pruned .prune-row-path {
+    text-decoration: line-through;
+    color: rgb(var(--gb-fg-dark));
+}
+
+.prune-row-check {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    accent-color: rgb(var(--gb-blue-accent));
+    cursor: pointer;
+}
+
+.prune-row-main {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+    flex: 1;
+}
+
+.prune-row-path {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    color: rgb(var(--gb-fg-light));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.prune-row-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+}
+
+.prune-badge {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.4;
+    padding: 1px 6px;
+    border-radius: 9999px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+
+.prune-badge-tokens {
+    color: rgb(var(--gb-fg-medium));
+    background: rgb(var(--gb-bg));
+    border-color: rgb(var(--gb-bg-light-2));
+}
+
+.prune-badge-ext {
+    color: rgb(var(--gb-aqua-accent));
+    background: rgb(var(--gb-aqua-accent) / 0.12);
+    border-color: rgb(var(--gb-aqua-accent) / 0.35);
+}
+
+.prune-badge-dup {
+    color: rgb(var(--gb-purple-accent));
+    background: rgb(var(--gb-purple-accent) / 0.12);
+    border-color: rgb(var(--gb-purple-accent) / 0.35);
+}
+
+.prune-badge-partial {
+    color: rgb(var(--gb-yellow-accent));
+    background: rgb(var(--gb-yellow-accent) / 0.12);
+    border-color: rgb(var(--gb-yellow-accent) / 0.35);
+}
+
+.prune-badge-pruned {
+    color: rgb(var(--gb-red-accent));
+    background: rgb(var(--gb-red-accent) / 0.12);
+    border-color: rgb(var(--gb-red-accent) / 0.35);
+}
+
+.prune-badge-mixed {
+    color: rgb(var(--gb-purple));
+    background: rgb(var(--gb-purple) / 0.15);
+    border-color: rgb(var(--gb-purple) / 0.4);
+}
+
+.prune-badge-jump {
+    color: rgb(var(--gb-blue-accent));
+    background: rgb(var(--gb-blue-accent) / 0.12);
+    border-color: rgb(var(--gb-blue-accent) / 0.35);
+    cursor: pointer;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.prune-badge-jump:hover {
+    color: rgb(var(--gb-fg-lightest));
+    background: rgb(var(--gb-blue-accent) / 0.3);
+}
+
+.prune-row-action {
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    color: rgb(var(--gb-fg-dark));
+    background: transparent;
+    transition: color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
+}
+
+.prune-row-action:hover {
+    background: rgb(var(--gb-bg-light-1));
+    color: rgb(var(--gb-red-accent));
+}
+
+.prune-row-action:active {
+    transform: scale(0.92);
+}
+
+.prune-row-action-restore:hover {
+    color: rgb(var(--gb-green-accent));
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .prune-drawer,
+    .prune-row,
+    .prune-chip,
+    .prune-badge-jump,
+    .prune-row-action {
+        transition: none !important;
+    }
+}
+
+/* Fenced code blocks.
+
+   The header is markup-only: behaviour lives in a single delegated listener in
+   codeblock.js, because the chat reassigns innerHTML wholesale on render and
+   would discard any handler bound directly to these elements. */
+.cb-wrap {
+    margin: 1rem 0;
+    border: 1px solid rgb(var(--gb-bg-light-1));
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgb(var(--gb-code-bg));
+}
+
+.cb-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 5px 8px 5px 12px;
+    background: rgb(var(--gb-bg));
+    border-bottom: 1px solid rgb(var(--gb-bg-light-1));
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.15s ease;
+}
+
+.cb-head:hover {
+    background: rgb(var(--gb-bg-light-1));
+}
+
+.cb-meta {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+}
+
+.cb-lang {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.6;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgb(var(--gb-aqua-accent));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cb-count {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 10px;
+    color: rgb(var(--gb-fg-dark));
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Hidden until hover, but always shown while collapsed: a collapsed block with
+   no visible control would look like a dead bar with no way back. */
+.cb-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.cb-wrap:hover .cb-actions,
+.cb-wrap:focus-within .cb-actions,
+.cb-wrap.cb-collapsed .cb-actions {
+    opacity: 1;
+}
+
+.cb-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: rgb(var(--gb-fg-dark));
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.4;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
+}
+
+.cb-btn:hover {
+    background: rgb(var(--gb-bg-light-1));
+    color: rgb(var(--gb-fg-lightest));
+}
+
+.cb-btn:active {
+    transform: scale(0.95);
+}
+
+.cb-btn-ok,
+.cb-btn-ok:hover {
+    color: rgb(var(--gb-green-accent));
+}
+
+.cb-btn svg {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cb-wrap.cb-collapsed .cb-btn[data-cb-action="toggle"] svg {
+    transform: rotate(-90deg);
+}
+
+/* Same grid-template-rows escape hatch as .folder-children-wrapper: animates
+   to true auto height without hardcoding a max-height. */
+.cb-body {
+    display: grid;
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transition: grid-template-rows 240ms cubic-bezier(0.4, 0, 0.2, 1), opacity 160ms ease-in-out;
+}
+
+.cb-wrap.cb-collapsed .cb-body {
+    grid-template-rows: 0fr;
+    opacity: 0;
+}
+
+.cb-body-inner {
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* The shared .prose pre rule supplies its own border, radius and margin, all of
+   which would double up against the wrapper. Everything else about that rule
+   (wrapping, word breaking, background) is left intact. */
+.cb-body-inner pre,
+.prose .cb-body-inner pre {
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+}
+
+@media (hover: none) {
+    .cb-actions {
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cb-head,
+    .cb-actions,
+    .cb-btn,
+    .cb-btn svg,
+    .cb-body {
+        transition: none !important;
+    }
+}
+
+/* Tabbed modal category rail.
+
+   Only one panel is mounted at a time. The rail owns its own scroll so a long
+   category list cannot push the footer off the dialog. The .settings-* names
+   are the original Settings markup; the .modal-* aliases are what any new
+   tabbed dialog should use. */
+.settings-tabs,
+.modal-tabs {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 208px;
+    flex-shrink: 0;
+    padding: 12px;
+    background: rgb(var(--gb-bg-darkest));
+    border-right: 1px solid rgb(var(--gb-bg-light-2));
+    overflow-y: auto;
+}
+
+.settings-tab,
+.modal-tab {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: rgb(var(--gb-fg-dark));
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.settings-tab:hover,
+.modal-tab:hover {
+    background: rgb(var(--gb-bg));
+    color: rgb(var(--gb-fg-light));
+}
+
+.settings-tab-active,
+.modal-tab-active {
+    background: rgb(var(--gb-bg-light-1));
+    border-color: rgb(var(--gb-bg-light-3));
+    color: rgb(var(--gb-fg-lightest));
+}
+
+.settings-tab svg,
+.modal-tab svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.settings-tab-active svg,
+.modal-tab-active svg {
+    color: rgb(var(--gb-aqua-accent));
+}
+
+.settings-panel,
+.modal-panel {
+    display: none;
+}
+
+/* min-height: 0 is what lets the inner scroll region actually scroll instead of
+   stretching the flex parent past the dialog height. */
+.settings-panel-active,
+.modal-panel-active {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    animation: fadeInUp 0.25s ease-out forwards;
+}
+
+/* Below md the rail would eat half the dialog, so it becomes a horizontally
+   scrolling strip above the panel. */
+@media (max-width: 767px) {
+    .settings-tabs,
+    .modal-tabs {
+        flex-direction: row;
+        width: 100%;
+        padding: 8px;
+        border-right: none;
+        border-bottom: 1px solid rgb(var(--gb-bg-light-2));
+        overflow-x: auto;
+        overflow-y: hidden;
+    }
+
+    .settings-tab,
+    .modal-tab {
+        width: auto;
+        flex-shrink: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .settings-tab,
+    .modal-tab {
+        transition: none !important;
+    }
+
+    .settings-panel-active,
+    .modal-panel-active {
+        animation: none !important;
+    }
+}
+
+/* Token counter: range chips, style chips, charts and pricing rows. */
+.tc-range-chip,
+.tc-style-chip {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 5px 12px;
+    border-radius: 9999px;
+    color: rgb(var(--gb-fg-dark));
+    background: rgb(var(--gb-bg));
+    border: 1px solid rgb(var(--gb-bg-light-1));
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.15s ease;
+}
+
+.tc-style-chip {
+    padding: 4px 10px;
+    border-color: transparent;
+    background: transparent;
+}
+
+.tc-range-chip:hover,
+.tc-style-chip:hover {
+    color: rgb(var(--gb-fg-lightest));
+    background: rgb(var(--gb-bg-light-1));
+    border-color: rgb(var(--gb-bg-light-3));
+}
+
+.tc-range-chip-active,
+.tc-style-chip-active {
+    color: rgb(var(--gb-bg-darkest)) !important;
+    background: rgb(var(--gb-aqua-accent)) !important;
+    border-color: rgb(var(--gb-aqua-accent)) !important;
+    box-shadow: 0 2px 8px rgb(var(--gb-aqua-accent) / 0.35);
+}
+
+.tc-range-chip:disabled,
+.tc-style-chip:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.tc-chart-wrap {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+}
+
+.tc-chart-svg {
+    display: block;
+    width: 100%;
+}
+
+.tc-grid-line {
+    stroke: rgb(var(--gb-bg-light-1));
+    stroke-width: 1;
+}
+
+.tc-axis-line {
+    stroke: rgb(var(--gb-bg-light-2));
+    stroke-width: 1;
+}
+
+.tc-axis-label {
+    fill: rgb(var(--gb-fg-dark));
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 10px;
+}
+
+.tc-bar-hit {
+    fill: transparent;
+    transition: fill 0.12s ease;
+}
+
+.tc-bar-hit:hover {
+    fill: rgb(var(--gb-fg-light) / 0.06);
+}
+
+.tc-chart-tooltip {
+    position: absolute;
+    z-index: 20;
+    pointer-events: none;
+    min-width: 180px;
+    padding: 10px 14px;
+    background: rgb(var(--gb-bg-darkest) / 0.95);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgb(var(--gb-bg-light-3));
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    color: rgb(var(--gb-fg-light));
+    transition: opacity 0.15s ease, transform 0.08s ease;
+}
+
+.tc-crosshair-line {
+    stroke: rgb(var(--gb-fg-medium) / 0.45);
+    stroke-width: 1.5;
+    stroke-dasharray: 3 3;
+    pointer-events: none;
+}
+
+.tc-heatmap-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: rgb(var(--gb-bg));
+    border: 1px solid rgb(var(--gb-bg-light-2));
+    border-radius: 10px;
+    padding: 12px 14px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.tc-heatmap-cell {
+    transition: transform 0.12s ease, stroke 0.12s ease;
+    cursor: pointer;
+}
+
+.tc-heatmap-cell:hover {
+    stroke: rgb(var(--gb-fg-lightest));
+    stroke-width: 1.5;
+    transform: scale(1.22);
+    transform-origin: center;
+}
+
+.tc-tip-title {
+    font-weight: 700;
+    color: rgb(var(--gb-fg-lightest));
+    margin-bottom: 5px;
+}
+
+.tc-tip-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1.6;
+}
+
+.tc-tip-value {
+    margin-left: auto;
+    font-weight: 700;
+    color: rgb(var(--gb-fg-lightest));
+}
+
+.tc-legend {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 10px;
+}
+
+.tc-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: rgb(var(--gb-fg-dark));
+}
+
+.tc-legend-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.tc-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 180px;
+    padding: 24px;
+    border: 1px dashed rgb(var(--gb-bg-light-1));
+    border-radius: 8px;
+    color: rgb(var(--gb-bg-light-3));
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+}
+
+.tc-price-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid rgb(var(--gb-bg-light-1));
+    border-radius: 8px;
+    background: rgb(var(--gb-bg-darkest));
+    transition: border-color 0.15s ease;
+}
+
+.tc-price-row:hover {
+    border-color: rgb(var(--gb-bg-light-2));
+}
+
+.tc-price-input {
+    width: 92px;
+    flex-shrink: 0;
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid rgb(var(--gb-bg-light-2));
+    background: rgb(var(--gb-bg));
+    color: rgb(var(--gb-fg-light));
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    outline: none;
+}
+
+.tc-price-input:focus {
+    border-color: rgb(var(--gb-blue-accent));
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tc-range-chip,
+    .tc-bar-hit,
+    .tc-price-row {
+        transition: none !important;
+    }
+}
+
+/* Model response tabs.
+
+   Rendered in place of the model name on assistant headers. Each tab is one
+   sibling response for the same turn; the dashed plus adds another. */
+.variant-tabs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    overflow-x: auto;
+    padding: 2px;
+}
+
+.variant-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    max-width: 260px;
+    padding: 3px 10px 3px 4px;
+    border-radius: 9999px;
+    border: 1px solid rgb(var(--gb-bg-light-2));
+    background: rgb(var(--gb-bg-darkest));
+    color: rgb(var(--gb-fg-dark));
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.variant-tab:hover {
+    background: rgb(var(--gb-bg-light-1));
+    border-color: rgb(var(--gb-bg-light-3));
+    color: rgb(var(--gb-fg-light));
+}
+
+.variant-tab:active {
+    transform: scale(0.97);
+}
+
+.variant-tab:focus-visible,
+.variant-tab-add:focus-visible {
+    outline: 2px solid rgb(var(--gb-blue-accent));
+    outline-offset: 1px;
+}
+
+.variant-tab-active,
+.variant-tab-active:hover {
+    color: rgb(var(--gb-fg-lightest));
+    background: rgb(var(--gb-blue-accent) / 0.14);
+    border-color: rgb(var(--gb-blue-accent));
+    cursor: default;
+    transform: none;
+}
+
+.variant-tab-avatar {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    max-height: 22px;
+    overflow: hidden;
+}
+
+.variant-tab-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.variant-tab-endpoint {
+    flex-shrink: 0;
+    padding: 0 6px;
+    border-radius: 9999px;
+    border: 1px solid rgb(var(--gb-aqua-accent) / 0.3);
+    background: rgb(var(--gb-aqua-accent) / 0.12);
+    color: rgb(var(--gb-aqua-accent));
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.variant-tab-status {
+    display: inline-flex;
+    flex-shrink: 0;
+}
+
+.variant-tab-status svg {
+    width: 13px;
+    height: 13px;
+}
+
+.variant-tab-pending .variant-tab-status {
+    color: rgb(var(--gb-aqua-accent));
+}
+
+.variant-tab-error {
+    color: rgb(var(--gb-red-accent));
+    border-color: rgb(var(--gb-red-accent) / 0.45);
+}
+
+.variant-tab-error.variant-tab-active,
+.variant-tab-error.variant-tab-active:hover {
+    color: rgb(var(--gb-red-accent));
+    background: rgb(var(--gb-red-accent) / 0.14);
+    border-color: rgb(var(--gb-red-accent));
+}
+
+/* Hidden until the message is hovered while a turn has one response, so plain
+   threads look unchanged; always visible once a turn has siblings. */
+.variant-tab-add {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 9999px;
+    border: 1px dashed rgb(var(--gb-bg-light-3));
+    background: transparent;
+    color: rgb(var(--gb-fg-dark));
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s ease, color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.variant-tab-add svg {
+    width: 14px;
+    height: 14px;
+}
+
+.group:hover .variant-tab-add,
+.variant-tabs-multi .variant-tab-add,
+.variant-tab-add:focus-visible {
+    opacity: 1;
+}
+
+.variant-tab-add:hover {
+    color: rgb(var(--gb-blue-accent));
+    border-color: rgb(var(--gb-blue-accent));
+    background: rgb(var(--gb-blue-accent) / 0.1);
+}
+
+@media (hover: none) {
+    .variant-tab-add {
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .variant-tab,
+    .variant-tab-add {
+        transition: none !important;
+    }
+}

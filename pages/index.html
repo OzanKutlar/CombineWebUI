@@ -1,0 +1,772 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1d2021">
+    <title>Copilot API - Raw Chat</title>
+    <script>
+        // Runs before any stylesheet parses, so a light theme never flashes
+        // dark on load. The storage key is duplicated as a literal rather than
+        // imported from config.js because module imports are deferred; if that
+        // key ever changes, it must be changed here too.
+        (function () {
+            var VALID = ['dark', 'hard', 'light'];
+            var theme = 'dark';
+            try {
+                var stored = localStorage.getItem('copilot_theme_v1');
+                if (stored && VALID.indexOf(stored) !== -1) theme = stored;
+            } catch (e) {
+                // Private mode or a blocked storage origin: fall through to the default.
+            }
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+    <link rel="icon" type="image/svg+xml" href="/static/icons/logo.svg">
+    <link rel="apple-touch-icon" href="/static/icons/logo.svg">
+    <link rel="manifest" href="/static/manifest.json">
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    <link rel="stylesheet" href="/static/css/themes.css">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    // Every entry points at a custom property defined in
+                    // themes.css. The <alpha-value> placeholder is what keeps
+                    // modifiers like bg-gb-red/20 working after the switch.
+                    colors: {
+                        gb: {
+                            bgDarkest: 'rgb(var(--gb-bg-darkest) / <alpha-value>)',
+                            bg: 'rgb(var(--gb-bg) / <alpha-value>)',
+                            bgLight1: 'rgb(var(--gb-bg-light-1) / <alpha-value>)',
+                            bgLight2: 'rgb(var(--gb-bg-light-2) / <alpha-value>)',
+                            bgLight3: 'rgb(var(--gb-bg-light-3) / <alpha-value>)',
+                            fgDark: 'rgb(var(--gb-fg-dark) / <alpha-value>)',
+                            fgMedium: 'rgb(var(--gb-fg-medium) / <alpha-value>)',
+                            fgLight: 'rgb(var(--gb-fg-light) / <alpha-value>)',
+                            fgLightest: 'rgb(var(--gb-fg-lightest) / <alpha-value>)',
+                            red: 'rgb(var(--gb-red) / <alpha-value>)',
+                            redAccent: 'rgb(var(--gb-red-accent) / <alpha-value>)',
+                            green: 'rgb(var(--gb-green) / <alpha-value>)',
+                            greenAccent: 'rgb(var(--gb-green-accent) / <alpha-value>)',
+                            blue: 'rgb(var(--gb-blue) / <alpha-value>)',
+                            blueAccent: 'rgb(var(--gb-blue-accent) / <alpha-value>)',
+                            aquaAccent: 'rgb(var(--gb-aqua-accent) / <alpha-value>)',
+                            purple: 'rgb(var(--gb-purple) / <alpha-value>)',
+                            purpleAccent: 'rgb(var(--gb-purple-accent) / <alpha-value>)',
+                            yellowAccent: 'rgb(var(--gb-yellow-accent) / <alpha-value>)',
+                            codeBg: 'rgb(var(--gb-code-bg) / <alpha-value>)'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="h-screen flex bg-gb-bgDarkest text-gb-fgLight font-sans overflow-hidden">
+
+    <!-- Sidebar (Prior Chats Pane) -->
+    <aside id="sidebar" class="w-64 bg-gb-bg border-r border-gb-bgLight2 flex flex-col shrink-0 h-full z-20 transition-all duration-300">
+        <div class="p-4 border-b border-gb-bgLight2 flex flex-col gap-2">
+            <!-- View Mode Switcher (Folders vs Recent) -->
+            <div class="flex rounded-lg bg-gb-bgDarkest p-1 border border-gb-bgLight2 text-xs font-semibold" role="tablist" aria-label="Chat organization mode">
+                <button id="view-mode-folders-btn" class="flex-1 py-1.5 rounded flex items-center justify-center gap-1.5 transition-all bg-gb-blue text-gb-bgDarkest shadow-sm" title="Folder Hierarchy View">
+                    <i data-lucide="folder-tree" class="w-3.5 h-3.5"></i> Folders
+                </button>
+                <button id="view-mode-recent-btn" class="flex-1 py-1.5 rounded flex items-center justify-center gap-1.5 transition-all text-gb-fgDark hover:text-gb-fgLight" title="Recent Chats View (Chronological by activity)">
+                    <i data-lucide="clock" class="w-3.5 h-3.5"></i> Recent
+                </button>
+            </div>
+            <button id="new-chat-btn" class="w-full bg-gb-blue hover:bg-gb-blueAccent text-gb-bgDarkest font-bold py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 transition-all duration-300 shadow-md hover:scale-[1.02] active:scale-95">
+                <i data-lucide="plus" class="w-5 h-5"></i> New Chat
+            </button>
+            <button id="new-folder-btn" class="w-full bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-fgLight font-semibold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-all duration-300 border border-gb-bgLight3 text-sm hover:scale-[1.02] active:scale-95">
+                <i data-lucide="folder-plus" class="w-4 h-4 text-gb-aquaAccent"></i> New Folder
+            </button>
+            <button id="search-chats-btn" class="w-full bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-fgLight font-semibold py-2 px-3 rounded-lg flex items-center justify-between transition-all duration-300 border border-gb-bgLight3 text-xs hover:scale-[1.02] active:scale-95" title="Search chats (Ctrl+K)">
+                <span class="flex items-center gap-2">
+                    <i data-lucide="search" class="w-3.5 h-3.5 text-gb-blueAccent"></i> Search Chats
+                </span>
+                <span class="text-[10px] font-mono text-gb-fgDark bg-gb-bgDarkest px-1.5 py-0.5 rounded border border-gb-bgLight2">Ctrl+K</span>
+            </button>
+        </div>
+        <div id="conv-list" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2 scrollbar-hide"></div>
+        <div class="p-4 border-t border-gb-bgLight2 text-xs text-gb-fgDark flex justify-between items-center bg-gb-bgDarkest">
+            <span class="font-medium">Saved Threads</span>
+            <button id="clear-all-convs-btn" class="hover:text-gb-redAccent transition-colors flex items-center gap-1 font-semibold hover:scale-105">
+                <i data-lucide="trash" class="w-3.5 h-3.5"></i> Clear All
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main chat workspace -->
+    <div class="flex-1 flex flex-col h-full overflow-hidden relative">
+        <header class="bg-gb-bg border-b border-gb-bgLight2 px-6 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center shrink-0 z-10 shadow-sm gap-4">
+            <div class="flex items-center gap-3 font-bold text-gb-fgLightest text-lg min-w-0 max-w-md">
+                <img src="/static/icons/logo.svg" alt="App Logo" class="w-7 h-7 rounded-md object-contain shrink-0 shadow-sm">
+                <span id="header-chat-title" class="truncate text-base sm:text-lg font-bold" title="Current Chat">Copilot API Chat</span>
+            </div>
+            <div class="flex items-center gap-4 sm:gap-6 w-full sm:w-auto justify-between sm:justify-end flex-wrap sm:flex-nowrap">
+                <div class="flex items-center gap-2 self-end mb-0.5">
+                    <button id="auto-folder-btn" class="hidden text-xs bg-gb-aquaAccent hover:bg-gb-greenAccent text-gb-bgDarkest font-bold py-2 px-3 rounded flex items-center gap-1.5 transition-all shadow-sm hover:scale-105 active:scale-95 whitespace-nowrap" title="Organize unsorted chats into folders with AI">
+                        <i data-lucide="folder-tree" class="w-3.5 h-3.5"></i> Auto Folder
+                    </button>
+                    <button id="auto-name-btn" class="hidden text-xs bg-gb-blue hover:bg-gb-blueAccent text-gb-bgDarkest font-bold py-2 px-3 rounded flex items-center gap-1.5 transition-all shadow-sm hover:scale-105 active:scale-95 whitespace-nowrap" title="Auto-name untitled chats with AI">
+                        <i data-lucide="zap" class="w-3.5 h-3.5"></i> Auto Name
+                    </button>
+                    <button id="auto-name-model-btn" title="Model used to auto-name and auto-folder chats" class="hidden text-xs bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight rounded px-2 py-2 flex items-center gap-1.5 max-w-[200px] font-mono shadow-sm transition-all hover:bg-gb-bgLight1 hover:border-gb-blueAccent active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <i data-lucide="cpu" class="w-3.5 h-3.5 text-gb-aquaAccent shrink-0"></i>
+                        <span id="auto-name-model-text" class="truncate">Loading...</span>
+                        <span id="auto-name-model-badge" class="hidden shrink-0 px-1 py-0.5 rounded text-[10px] font-bold bg-gb-red/20 text-gb-redAccent border border-gb-red/30">1x</span>
+                        <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-gb-fgDark shrink-0"></i>
+                    </button>
+                </div>
+                <div class="flex flex-col">
+                    <label class="text-xs text-gb-fgDark font-semibold mb-1 uppercase tracking-wider flex justify-between">
+                        Model Selection
+                        <span id="quota-display" class="text-gb-blueAccent font-mono ml-4">Fetching quota...</span>
+                    </label>
+                    <button id="model-select-btn" class="bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent focus:border-gb-blueAccent flex w-full sm:w-64 p-2 shadow-sm font-medium outline-none justify-between items-center transition-colors hover:bg-gb-bgLight1">
+                        <span id="selected-model-text" class="truncate">Loading models...</span>
+                        <i data-lucide="chevron-down" class="w-4 h-4 text-gb-fgDark"></i>
+                    </button>
+                </div>
+                <div class="flex items-center gap-4 mt-4 sm:mt-0 pt-3 sm:pt-0 shrink-0 self-end mb-0.5">
+                    <button id="token-counter-btn" class="text-gb-fgDark hover:text-gb-aquaAccent flex items-center gap-1 text-sm font-semibold transition-colors hover:scale-105 active:scale-95" title="View Token Counter (By Model & Provider)">
+                        <i data-lucide="calculator" class="w-4 h-4"></i> Tokens
+                    </button>
+                    <button id="clear-btn" class="text-gb-fgDark hover:text-gb-redAccent flex items-center gap-1 text-sm font-semibold transition-colors hover:scale-105 active:scale-95" title="Clear Current Chat">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i> Clear
+                    </button>
+                    <button id="settings-btn" class="text-gb-fgDark hover:text-gb-blueAccent flex items-center gap-1 text-sm font-semibold transition-colors hover:scale-105 active:scale-95" title="Global Settings">
+                        <i data-lucide="settings" class="w-4 h-4"></i> Settings
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main id="chat-container" class="relative flex-1 overflow-y-auto p-6 flex flex-col items-center"></main>
+
+        <!-- Chat Navigation Rail -->
+        <nav id="chat-nav-rail" class="chat-nav-rail hidden md:flex" aria-label="Chat navigation">
+            <button id="chat-nav-prev" class="chat-nav-step-btn" title="Previous message (Alt+Up)" aria-label="Previous message">
+                <i data-lucide="chevron-up" class="w-4 h-4"></i>
+            </button>
+            <div id="chat-nav-list" class="chat-nav-list scrollbar-hide"></div>
+            <button id="chat-nav-next" class="chat-nav-step-btn" title="Next message (Alt+Down)" aria-label="Next message">
+                <i data-lucide="chevron-down" class="w-4 h-4"></i>
+            </button>
+        </nav>
+
+        <footer class="bg-gb-bg border-t border-gb-bgLight2 p-4 shrink-0">
+            <div class="max-w-5xl mx-auto flex flex-col gap-2">
+                <div class="flex justify-between items-center px-1 gap-3">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <span id="token-count" class="text-xs text-gb-fgDark font-semibold uppercase tracking-wider truncate">0 / 100,000 tokens</span>
+                        <button id="prune-files-btn" class="text-xs text-gb-fgDark hover:text-gb-aquaAccent font-bold uppercase tracking-wider flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gb-bgLight1 transition-colors shrink-0" title="Manage context files (prune / restore)">
+                            <i data-lucide="scissors" class="w-3.5 h-3.5"></i> Manage Files
+                        </button>
+                    </div>
+                    <span class="text-xs text-gb-bgLight3 font-medium shrink-0">Ctrl + Enter to send</span>
+                </div>
+                <div class="flex gap-4 items-end">
+                    <textarea id="prompt-input" rows="5" class="w-full bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-sm rounded-lg focus:ring-1 focus:ring-gb-blueAccent focus:border-gb-blueAccent outline-none p-4 resize-y font-mono shadow-inner placeholder-gb-bgLight3" placeholder="Enter prompt here..."></textarea>
+                    <div class="flex flex-col gap-2 shrink-0">
+                        <button id="continue-btn" class="bg-gb-bgLight2 hover:bg-gb-bgLight3 text-gb-fgLight font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition-all duration-300 justify-center whitespace-nowrap shadow-md hover:scale-[1.02] active:scale-95">
+                            <i data-lucide="play" class="w-4 h-4 text-gb-aquaAccent"></i> Continue
+                        </button>
+                        <button id="send-btn" class="bg-gb-blue hover:bg-gb-blueAccent text-gb-bgDarkest font-bold py-4 px-8 rounded-lg flex items-center gap-2 transition-all duration-300 h-full whitespace-nowrap shadow-md hover:scale-[1.02] active:scale-95">
+                            <i data-lucide="send" class="w-5 h-5"></i> Send
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Custom sliding Confirm Modal Overlay -->
+    <div id="confirm-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center opacity-0 pointer-events-none transition-all duration-300">
+        <div id="confirm-modal-box" class="bg-gb-bg border border-gb-bgLight2 rounded-xl max-w-md w-full p-6 shadow-2xl transform translate-y-8 transition-all duration-300 flex flex-col gap-4">
+            <div class="flex items-center gap-3 text-gb-redAccent font-bold text-lg">
+                <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+                <span id="modal-title">Confirm Action</span>
+            </div>
+            <p id="modal-text" class="text-sm text-gb-fgMedium leading-relaxed">Are you sure you want to proceed?</p>
+            <div class="flex justify-end gap-3 mt-2">
+                <button id="modal-cancel-btn" class="px-4 py-2 rounded bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-fgLight text-sm font-semibold transition-colors">Cancel</button>
+                <button id="modal-confirm-btn" class="px-4 py-2 rounded bg-gb-red hover:bg-gb-redAccent text-gb-bgDarkest text-sm font-bold transition-all transform hover:scale-105 active:scale-95">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center opacity-0 pointer-events-none transition-all duration-300">
+        <div id="settings-modal-box" class="bg-gb-bg border border-gb-bgLight2 rounded-xl max-w-5xl w-full h-[85vh] shadow-2xl transform translate-y-8 transition-all duration-300 flex flex-col">
+            <div class="p-6 border-b border-gb-bgLight2 flex justify-between items-center bg-gb-bgDarkest rounded-t-xl shrink-0">
+                <div class="flex items-center gap-3 text-gb-fgLightest font-bold text-lg">
+                    <i data-lucide="settings" class="w-6 h-6 text-gb-aquaAccent"></i>
+                    <span>Settings</span>
+                </div>
+                <button id="close-settings-btn" class="text-gb-fgDark hover:text-gb-redAccent transition-colors rounded hover:bg-gb-bgLight1 p-1">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+
+            <div class="flex flex-col md:flex-row flex-1 min-h-0">
+                <nav id="settings-tabs" class="settings-tabs scrollbar-hide" aria-label="Settings categories">
+                    <button type="button" class="settings-tab settings-tab-active" data-panel="endpoints">
+                        <i data-lucide="server"></i> Local Models
+                    </button>
+                    <button type="button" class="settings-tab" data-panel="generation">
+                        <i data-lucide="sliders-horizontal"></i> Generation
+                    </button>
+                    <button type="button" class="settings-tab" data-panel="display">
+                        <i data-lucide="eye"></i> Display
+                    </button>
+                    <button type="button" class="settings-tab" data-panel="providers">
+                        <i data-lucide="image"></i> Providers
+                    </button>
+                    <button type="button" class="settings-tab" data-panel="network">
+                        <i data-lucide="wifi"></i> Network
+                    </button>
+                </nav>
+
+                <div id="settings-panels" class="flex-1 min-w-0 min-h-0 flex flex-col">
+
+                    <section class="settings-panel settings-panel-active" data-panel="endpoints">
+                        <div class="px-6 pt-6 pb-3 shrink-0 border-b border-gb-bgLight2">
+                            <h3 class="text-md font-bold text-gb-fgLightest">Custom OpenAI Endpoints</h3>
+                            <p class="text-xs text-gb-fgDark mt-1.5 leading-relaxed">Point the proxy to local or third-party servers compatible with the OpenAI API format (e.g., Ollama, vLLM, LM Studio). Using custom endpoints consumes 0 Copilot credits.</p>
+                        </div>
+                        <div class="px-6 py-5 overflow-y-auto scrollbar-hide flex-1">
+                            <div id="endpoints-list" class="flex flex-col gap-4"></div>
+                            <button id="add-endpoint-btn" class="mt-4 bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-fgLight text-sm font-semibold py-2 px-4 rounded border border-gb-bgLight3 transition-colors flex items-center gap-2">
+                                <i data-lucide="plus" class="w-4 h-4"></i> Add Endpoint
+                            </button>
+                        </div>
+                    </section>
+
+                    <section class="settings-panel" data-panel="generation">
+                        <div class="px-6 pt-6 pb-3 shrink-0 border-b border-gb-bgLight2">
+                            <h3 class="text-md font-bold text-gb-fgLightest">Thinking / Reasoning Defaults</h3>
+                            <p class="text-xs text-gb-fgDark mt-1.5 leading-relaxed">Controls the reasoning budget sent with requests to models whose id matches one of the enabled keywords.</p>
+                        </div>
+                        <div class="px-6 py-5 overflow-y-auto scrollbar-hide flex-1">
+                            <div class="flex flex-col gap-4 max-w-2xl">
+                                <div>
+                                    <label class="text-xs text-gb-fgDark font-semibold uppercase">Enabled Keywords (comma separated)</label>
+                                    <input type="text" id="setting-thinking-keywords" class="w-full bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-3 py-2 mt-1">
+                                </div>
+                                <div class="flex flex-col sm:flex-row gap-4">
+                                    <div class="flex-1">
+                                        <label class="text-xs text-gb-fgDark font-semibold uppercase">Max Completion Tokens</label>
+                                        <input type="number" id="setting-thinking-max-comp" class="w-full bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-3 py-2 mt-1">
+                                    </div>
+                                    <div class="flex-1">
+                                        <label class="text-xs text-gb-fgDark font-semibold uppercase">Budget Tokens</label>
+                                        <input type="number" id="setting-thinking-budget" class="w-full bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-3 py-2 mt-1">
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <input type="checkbox" id="setting-thinking-unlimited" class="w-4 h-4 rounded border-gb-bgLight2 bg-gb-bgDarkest text-gb-blueAccent focus:ring-gb-blueAccent cursor-pointer">
+                                    <label class="text-sm text-gb-fgLight cursor-pointer select-none" for="setting-thinking-unlimited">Unlimited Budget (Sets budget = max completion tokens)</label>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="settings-panel" data-panel="display">
+                        <div class="px-6 pt-6 pb-3 shrink-0 border-b border-gb-bgLight2">
+                            <h3 class="text-md font-bold text-gb-fgLightest">Display &amp; Appearance</h3>
+                            <p class="text-xs text-gb-fgDark mt-1.5 leading-relaxed">Theme and thinking-trace options are stored in this browser and synced to your other open tabs. Whether a model&#39;s thinking is replayed back into context is toggled per model with the brain icon in the model picker, and is off by default.</p>
+                        </div>
+                        <div class="px-6 py-5 overflow-y-auto scrollbar-hide flex-1">
+                            <div class="flex flex-col gap-6 max-w-2xl">
+
+                                <div class="flex flex-col gap-3">
+                                    <label class="text-xs text-gb-fgDark font-semibold uppercase">Color Scheme</label>
+                                    <div id="setting-theme-picker" class="flex flex-col gap-2"></div>
+                                    <p class="text-xs text-gb-fgDark leading-relaxed">Applied instantly so you can preview it. Cancel reverts to the theme you opened this dialog with; Save Changes makes it permanent.</p>
+                                </div>
+
+                                <div class="border-t border-gb-bgLight2 pt-5 flex flex-col gap-4">
+                                    <h4 class="text-sm font-bold text-gb-fgLightest">Thinking Traces</h4>
+                                    <div class="flex items-center gap-2">
+                                        <input type="checkbox" id="setting-thinking-show" class="w-4 h-4 rounded border-gb-bgLight2 bg-gb-bgDarkest text-gb-blueAccent focus:ring-gb-blueAccent cursor-pointer">
+                                        <label class="text-sm text-gb-fgLight cursor-pointer select-none" for="setting-thinking-show">Show thinking traces</label>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <input type="checkbox" id="setting-thinking-autoexpand" class="w-4 h-4 rounded border-gb-bgLight2 bg-gb-bgDarkest text-gb-blueAccent focus:ring-gb-blueAccent cursor-pointer">
+                                        <label class="text-sm text-gb-fgLight cursor-pointer select-none" for="setting-thinking-autoexpand">Auto-expand thinking traces</label>
+                                    </div>
+                                    <div class="border-t border-gb-bgLight2 pt-4 mt-1">
+                                        <label class="text-xs text-gb-fgDark font-semibold uppercase">Inline Thinking Tags (comma separated)</label>
+                                        <input type="text" id="setting-thinking-tags" class="w-full bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-3 py-2 mt-1" placeholder="think, thinking, reasoning">
+                                        <p class="text-xs text-gb-fgDark mt-2 leading-relaxed">Tags are only recognised at the start of a line and are ignored inside code blocks. Leave this empty to disable inline parsing entirely and keep every tag as visible text.</p>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="settings-panel" data-panel="providers">
+                        <div class="px-6 pt-6 pb-3 shrink-0 border-b border-gb-bgLight2">
+                            <h3 class="text-md font-bold text-gb-fgLightest">Model Picture Groups (Providers)</h3>
+                            <p class="text-xs text-gb-fgDark mt-1.5 leading-relaxed">Organize models in the Model Matrix and assign chat reply avatars by matching keywords to model pictures. Supports image URLs, local SVG paths, and raw pasted SVG markup.</p>
+                        </div>
+                        <div class="px-6 py-5 overflow-y-auto scrollbar-hide flex-1">
+                            <div id="provider-groups-list" class="flex flex-col gap-4"></div>
+                            <button id="add-provider-group-btn" class="mt-4 bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-fgLight text-sm font-semibold py-2 px-4 rounded border border-gb-bgLight3 transition-colors flex items-center gap-2">
+                                <i data-lucide="plus" class="w-4 h-4"></i> Add Picture Group
+                            </button>
+                        </div>
+                    </section>
+
+                    <section class="settings-panel" data-panel="network">
+                        <div class="px-6 pt-6 pb-3 shrink-0 border-b border-gb-bgLight2">
+                            <h3 class="text-md font-bold text-gb-fgLightest">Request &amp; Timeout Settings</h3>
+                            <p class="text-xs text-gb-fgDark mt-1.5 leading-relaxed">How long the proxy waits on upstream providers before giving up.</p>
+                        </div>
+                        <div class="px-6 py-5 overflow-y-auto scrollbar-hide flex-1">
+                            <div class="max-w-md">
+                                <label class="text-xs text-gb-fgDark font-semibold uppercase">Non-Streaming Timeout (seconds)</label>
+                                <input type="number" id="setting-non-stream-timeout" class="w-full bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-3 py-2 mt-1" min="5" placeholder="240">
+                                <p class="text-xs text-gb-fgDark mt-2 leading-relaxed">Maximum time in seconds to wait for a response when streaming is disabled (default: 240s).</p>
+                            </div>
+                        </div>
+                    </section>
+
+                </div>
+            </div>
+
+            <div class="p-6 border-t border-gb-bgLight2 bg-gb-bgDarkest rounded-b-xl flex justify-end gap-3 shrink-0">
+                <button id="cancel-settings-btn" class="px-4 py-2 rounded bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-fgLight text-sm font-semibold transition-colors">Cancel</button>
+                <button id="save-settings-btn" class="px-4 py-2 rounded bg-gb-blue hover:bg-gb-blueAccent text-gb-bgDarkest text-sm font-bold transition-all transform hover:scale-105 active:scale-95">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Save Progress Modal -->
+    <div id="save-progress-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center opacity-0 pointer-events-none transition-all duration-300">
+        <div id="save-progress-modal-box" class="bg-gb-bg border border-gb-bgLight2 rounded-xl max-w-lg w-full max-h-[85vh] shadow-2xl transform translate-y-8 transition-all duration-300 flex flex-col">
+            <div class="p-5 border-b border-gb-bgLight2 flex justify-between items-center bg-gb-bgDarkest rounded-t-xl shrink-0">
+                <div class="flex items-center gap-3 text-gb-fgLightest font-bold text-base sm:text-lg">
+                    <i data-lucide="activity" class="w-5 h-5 text-gb-aquaAccent"></i>
+                    <span>Verifying Settings & Providers</span>
+                </div>
+                <button id="close-save-progress-modal-btn" class="text-gb-fgDark hover:text-gb-redAccent transition-colors rounded hover:bg-gb-bgLight1 p-1 hidden">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div id="save-progress-container" class="p-5 overflow-y-auto flex flex-col gap-3 scrollbar-hide flex-1"></div>
+            <div class="p-4 border-t border-gb-bgLight2 bg-gb-bgDarkest rounded-b-xl flex justify-between items-center shrink-0">
+                <span id="save-progress-summary" class="text-xs text-gb-fgDark font-mono truncate mr-2"></span>
+                <button id="save-progress-done-btn" class="px-4 py-2 rounded bg-gb-bgLight1 text-gb-fgDark text-sm font-semibold transition-all cursor-not-allowed opacity-50" disabled>Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Modal -->
+    <div id="search-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center opacity-0 pointer-events-none transition-all duration-300">
+        <div id="search-modal-box" class="bg-gb-bg border border-gb-bgLight2 rounded-xl max-w-3xl w-full max-h-[85vh] shadow-2xl transform translate-y-8 transition-all duration-300 flex flex-col">
+            <div class="p-5 border-b border-gb-bgLight2 flex justify-between items-center bg-gb-bgDarkest rounded-t-xl shrink-0 gap-3">
+                <div class="flex items-center gap-3 text-gb-fgLightest font-bold text-lg min-w-0">
+                    <i data-lucide="search" class="w-5 h-5 text-gb-blueAccent shrink-0"></i>
+                    <span>Search Conversations</span>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <div class="flex rounded bg-gb-bgDarkest p-0.5 border border-gb-bgLight2 text-xs font-semibold">
+                        <button id="search-tab-titles" class="px-2.5 py-1 rounded bg-gb-blue text-gb-bgDarkest transition-colors">Titles</button>
+                        <button id="search-tab-deep" class="px-2.5 py-1 rounded bg-gb-bgLight1 text-gb-fgLight transition-colors">Deep Content</button>
+                    </div>
+                    <button id="close-search-modal-btn" class="text-gb-fgDark hover:text-gb-redAccent transition-colors rounded hover:bg-gb-bgLight1 p-1 shrink-0">
+                        <i data-lucide="x" class="w-6 h-6"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="p-4 flex flex-col gap-3 border-b border-gb-bgLight2 shrink-0 bg-gb-bg">
+                <div class="relative">
+                    <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gb-fgDark pointer-events-none"></i>
+                    <input type="text" id="search-input" placeholder="Search keywords, &quot;exact phrases&quot;, -excluded..." class="w-full bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-sm rounded pl-10 pr-3 py-2.5 outline-none focus:ring-1 focus:ring-gb-blueAccent focus:border-gb-blueAccent font-mono placeholder-gb-bgLight3">
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-gb-fgDark">
+                    <div class="flex flex-wrap items-center gap-4">
+                        <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                            <input type="checkbox" id="search-opt-case" class="w-3.5 h-3.5 rounded border-gb-bgLight2 bg-gb-bgDarkest text-gb-blueAccent focus:ring-gb-blueAccent cursor-pointer">
+                            <span>Match Case</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                            <input type="checkbox" id="search-opt-word" class="w-3.5 h-3.5 rounded border-gb-bgLight2 bg-gb-bgDarkest text-gb-blueAccent focus:ring-gb-blueAccent cursor-pointer">
+                            <span>Whole Word</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                            <input type="checkbox" id="search-opt-regex" class="w-3.5 h-3.5 rounded border-gb-bgLight2 bg-gb-bgDarkest text-gb-blueAccent focus:ring-gb-blueAccent cursor-pointer">
+                            <span>RegEx</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 cursor-pointer select-none border-l border-gb-bgLight2 pl-4">
+                            <input type="checkbox" id="search-opt-scaffolding" class="w-3.5 h-3.5 rounded border-gb-bgLight2 bg-gb-bgDarkest text-gb-blueAccent focus:ring-gb-blueAccent cursor-pointer">
+                            <span>Include Scaffolding</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                            <input type="checkbox" id="search-opt-thinking" class="w-3.5 h-3.5 rounded border-gb-bgLight2 bg-gb-bgDarkest text-gb-blueAccent focus:ring-gb-blueAccent cursor-pointer">
+                            <span>Include Thinking</span>
+                        </label>
+                    </div>
+                    <button id="search-deep-btn" class="px-3 py-1.5 rounded bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-blueAccent border border-gb-bgLight3 font-bold transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5 ml-auto shrink-0" title="Deep search message bodies across all threads">
+                        <i data-lucide="file-search" class="w-3.5 h-3.5"></i> Deep Search
+                    </button>
+                </div>
+                <div id="search-error-banner" class="hidden px-3 py-1.5 rounded bg-gb-red/20 border border-gb-redAccent/30 text-gb-redAccent text-xs font-mono"></div>
+            </div>
+
+            <div id="search-results-list" class="p-4 overflow-y-auto flex flex-col gap-3 scrollbar-hide flex-1 bg-gb-bgDarkest"></div>
+
+            <div class="p-3 border-t border-gb-bgLight2 bg-gb-bgDarkest rounded-b-xl flex justify-between items-center shrink-0 text-xs font-mono text-gb-fgDark">
+                <span id="search-status-bar">Ready</span>
+                <span class="text-[11px] text-gb-bgLight3">Press Enter for deep search &middot; Esc to close</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auto Folder Preview Modal -->
+    <div id="auto-folder-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center opacity-0 pointer-events-none transition-all duration-300">
+        <div id="auto-folder-modal-box" class="bg-gb-bg border border-gb-bgLight2 rounded-xl max-w-2xl w-full max-h-[85vh] shadow-2xl transform translate-y-8 transition-all duration-300 flex flex-col">
+            <div class="p-6 border-b border-gb-bgLight2 flex justify-between items-center bg-gb-bgDarkest rounded-t-xl shrink-0">
+                <div class="flex items-center gap-3 text-gb-fgLightest font-bold text-lg">
+                    <i data-lucide="folder-tree" class="w-6 h-6 text-gb-aquaAccent"></i>
+                    <span>Auto Folder Preview</span>
+                </div>
+                <button id="close-auto-folder-modal-btn" class="text-gb-fgDark hover:text-gb-redAccent transition-colors rounded hover:bg-gb-bgLight1 p-1">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+            <div id="auto-folder-preview-container" class="p-6 overflow-y-auto flex flex-col gap-4 scrollbar-hide flex-1"></div>
+            <div class="p-6 border-t border-gb-bgLight2 bg-gb-bgDarkest rounded-b-xl flex justify-end gap-3 shrink-0">
+                <button id="auto-folder-cancel-btn" class="px-4 py-2 rounded bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-fgLight text-sm font-semibold transition-colors">Cancel</button>
+                <button id="auto-folder-apply-btn" class="px-4 py-2 rounded bg-gb-blue hover:bg-gb-blueAccent text-gb-bgDarkest text-sm font-bold transition-all transform hover:scale-105 active:scale-95">Apply Organization</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Token Counter Modal -->
+    <div id="token-counter-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center opacity-0 pointer-events-none transition-all duration-300">
+        <div id="token-counter-modal-box" class="bg-gb-bg border border-gb-bgLight2 rounded-xl max-w-5xl w-full h-[88vh] shadow-2xl transform translate-y-8 transition-all duration-300 flex flex-col">
+            <div class="p-5 border-b border-gb-bgLight2 flex justify-between items-center bg-gb-bgDarkest rounded-t-xl shrink-0 gap-3">
+                <div class="flex items-center gap-3 text-gb-fgLightest font-bold text-lg min-w-0">
+                    <div class="p-2 bg-gb-bgLight1 rounded-md border border-gb-bgLight3 shrink-0 text-gb-aquaAccent">
+                        <i data-lucide="calculator" class="w-5 h-5"></i>
+                    </div>
+                    <div class="flex flex-col min-w-0">
+                        <span>Chat Token Counter</span>
+                        <span class="text-xs font-normal text-gb-fgDark truncate">Retroactively calculated from conversation logs</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button id="refresh-token-counter-btn" class="px-3 py-1.5 rounded bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-blueAccent border border-gb-bgLight3 text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95" title="Recalculate, reusing cached counts for unchanged chats">
+                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Recalculate
+                    </button>
+                    <button id="force-token-counter-btn" class="px-3 py-1.5 rounded bg-gb-bgDarkest hover:bg-gb-bgLight1 text-gb-fgDark hover:text-gb-redAccent border border-gb-bgLight2 text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95" title="Ignore the cache and re-tokenize every conversation from scratch (slow)">
+                        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Force rebuild
+                    </button>
+                    <button id="close-token-counter-btn" class="text-gb-fgDark hover:text-gb-redAccent transition-colors rounded hover:bg-gb-bgLight1 p-1 shrink-0">
+                        <i data-lucide="x" class="w-6 h-6"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div id="tc-range-row" class="px-5 py-3 border-b border-gb-bgLight2 bg-gb-bgDarkest flex items-center gap-2 shrink-0 flex-wrap">
+                <span class="text-[11px] font-bold text-gb-fgDark uppercase tracking-wider mr-1">Range</span>
+                <button type="button" class="tc-range-chip tc-range-chip-active" data-range="all">All time</button>
+                <button type="button" class="tc-range-chip" data-range="month">This month</button>
+                <button type="button" class="tc-range-chip" data-range="week">This week</button>
+                <span id="tc-range-note" class="text-[11px] font-mono text-gb-bgLight3 ml-auto truncate"></span>
+            </div>
+
+            <div class="flex flex-col md:flex-row flex-1 min-h-0">
+                <nav id="tc-tabs" class="modal-tabs scrollbar-hide" aria-label="Token counter categories">
+                    <button type="button" class="modal-tab modal-tab-active" data-panel="overview">
+                        <i data-lucide="layout-dashboard"></i> Overview
+                    </button>
+                    <button type="button" class="modal-tab" data-panel="trends">
+                        <i data-lucide="bar-chart-3"></i> Trends
+                    </button>
+                    <button type="button" class="modal-tab" data-panel="providers">
+                        <i data-lucide="box"></i> Providers
+                    </button>
+                    <button type="button" class="modal-tab" data-panel="models">
+                        <i data-lucide="cpu"></i> Models
+                    </button>
+                    <button type="button" class="modal-tab" data-panel="pricing">
+                        <i data-lucide="dollar-sign"></i> Pricing
+                    </button>
+                </nav>
+
+                <div id="tc-panels" class="flex-1 min-w-0 min-h-0 flex flex-col bg-gb-bgDarkest">
+
+                    <section class="modal-panel modal-panel-active" data-panel="overview">
+                        <div class="px-6 pt-5 pb-3 shrink-0 border-b border-gb-bgLight2">
+                            <h3 class="text-md font-bold text-gb-fgLightest">Usage Summary</h3>
+                            <p id="tc-overview-sub" class="text-xs text-gb-fgDark mt-1.5 leading-relaxed">All time</p>
+                        </div>
+                        <div class="px-6 py-5 overflow-y-auto scrollbar-hide flex-1 flex flex-col gap-6">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                                <div class="bg-gb-bg border border-gb-bgLight2 rounded-lg p-4 flex flex-col gap-1 shadow-sm">
+                                    <span class="text-xs font-bold text-gb-fgDark uppercase tracking-wider">Total Tokens</span>
+                                    <span id="tc-grand-total" class="text-2xl font-bold font-mono text-gb-fgLightest">0</span>
+                                    <span id="tc-turns-summary" class="text-[11px] text-gb-bgLight3 font-mono mt-1">0 turns</span>
+                                </div>
+                                <div class="bg-gb-bg border border-gb-bgLight2 rounded-lg p-4 flex flex-col gap-1 shadow-sm">
+                                    <span class="text-xs font-bold text-gb-blueAccent uppercase tracking-wider flex items-center gap-1.5">
+                                        <i data-lucide="arrow-down-left" class="w-3.5 h-3.5"></i> Inputted
+                                    </span>
+                                    <span id="tc-total-input" class="text-2xl font-bold font-mono text-gb-blueAccent">0</span>
+                                    <span class="text-[11px] text-gb-fgDark font-mono mt-1">Turns + cumulative context</span>
+                                </div>
+                                <div class="bg-gb-bg border border-gb-bgLight2 rounded-lg p-4 flex flex-col gap-1 shadow-sm">
+                                    <span class="text-xs font-bold text-gb-greenAccent uppercase tracking-wider flex items-center gap-1.5">
+                                        <i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i> Outputted
+                                    </span>
+                                    <span id="tc-total-output" class="text-2xl font-bold font-mono text-gb-greenAccent">0</span>
+                                    <span class="text-[11px] text-gb-fgDark font-mono mt-1">Content &amp; reasoning</span>
+                                </div>
+                                <div class="bg-gb-bg border border-gb-bgLight2 rounded-lg p-4 flex flex-col gap-1 shadow-sm">
+                                    <span class="text-xs font-bold text-gb-purpleAccent uppercase tracking-wider flex items-center gap-1.5">
+                                        <i data-lucide="wallet" class="w-3.5 h-3.5"></i> Estimated Cost
+                                    </span>
+                                    <span id="tc-total-cost" class="text-2xl font-bold font-mono text-gb-purpleAccent">—</span>
+                                    <span id="tc-cost-note" class="text-[11px] text-gb-fgDark font-mono mt-1">No prices configured</span>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-col gap-3">
+                                <div class="flex items-center justify-between border-b border-gb-bgLight2 pb-2">
+                                    <h3 class="text-sm font-bold text-gb-fgLightest uppercase tracking-wide flex items-center gap-2">
+                                        <i data-lucide="trophy" class="w-4 h-4 text-gb-aquaAccent"></i> Top Models
+                                    </h3>
+                                    <span id="tc-top-note" class="text-xs font-mono text-gb-fgDark"></span>
+                                </div>
+                                <div id="tc-top-models" class="flex flex-col gap-2"></div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="modal-panel" data-panel="trends">
+                        <div class="px-6 pt-5 pb-3 shrink-0 border-b border-gb-bgLight2 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                            <div>
+                                <h3 class="text-md font-bold text-gb-fgLightest">Usage Over Time</h3>
+                                <p class="text-xs text-gb-fgDark mt-1.5 leading-relaxed">Explore token throughput and costs across custom visual styles.</p>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-3 shrink-0">
+                                <div id="tc-chart-type-row" class="flex items-center gap-1.5 p-1 bg-gb-bg rounded-full border border-gb-bgLight2" role="tablist" aria-label="Chart style">
+                                    <button type="button" class="tc-style-chip tc-style-chip-active" data-chart-type="area" title="3 Normalized Layered Area Waves">
+                                        <i data-lucide="area-chart" class="w-3.5 h-3.5"></i> Area
+                                    </button>
+                                    <button type="button" class="tc-style-chip" data-chart-type="spline" title="3 Normalized Spline Curves">
+                                        <i data-lucide="line-chart" class="w-3.5 h-3.5"></i> Spline
+                                    </button>
+                                    <button type="button" class="tc-style-chip" data-chart-type="heatmap" title="Triple Activity Heatmap (Input / Output / Cost)">
+                                        <i data-lucide="grid" class="w-3.5 h-3.5"></i> Heatmaps
+                                    </button>
+                                </div>
+                                <div id="tc-granularity-row" class="flex items-center gap-1.5">
+                                    <button type="button" class="tc-range-chip tc-range-chip-active" data-granularity="daily">Daily</button>
+                                    <button type="button" class="tc-range-chip" data-granularity="weekly">Weekly</button>
+                                    <button type="button" class="tc-range-chip" data-granularity="monthly">Monthly</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="px-6 py-5 overflow-y-auto scrollbar-hide flex-1 flex flex-col gap-4">
+                            <div id="tc-chart" class="w-full"></div>
+                            <div id="tc-trend-summary" class="text-xs font-mono text-gb-fgDark leading-relaxed"></div>
+                        </div>
+                    </section>
+
+                    <section class="modal-panel" data-panel="providers">
+                        <div class="px-6 pt-5 pb-3 shrink-0 border-b border-gb-bgLight2 flex items-center justify-between gap-3">
+                            <div>
+                                <h3 class="text-md font-bold text-gb-fgLightest">Tokens by Provider</h3>
+                                <p class="text-xs text-gb-fgDark mt-1.5 leading-relaxed">Models are grouped by the picture-group keywords set in Settings.</p>
+                            </div>
+                            <span id="tc-provider-count" class="text-xs font-mono text-gb-fgDark shrink-0">0 providers</span>
+                        </div>
+                        <div class="px-6 py-5 overflow-y-auto scrollbar-hide flex-1">
+                            <div class="overflow-x-auto rounded-lg border border-gb-bgLight2">
+                                <table class="w-full text-left text-xs font-mono">
+                                    <thead class="bg-gb-bg text-gb-fgDark uppercase tracking-wider text-[11px] border-b border-gb-bgLight2">
+                                        <tr>
+                                            <th class="p-3">Provider</th>
+                                            <th class="p-3 text-right text-gb-blueAccent">Inputted</th>
+                                            <th class="p-3 text-right text-gb-greenAccent">Outputted</th>
+                                            <th class="p-3 text-right text-gb-fgLightest">Total</th>
+                                            <th class="p-3 text-right text-gb-purpleAccent">Cost</th>
+                                            <th class="p-3 text-right text-gb-fgDark">Turns</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tc-providers-tbody" class="divide-y divide-gb-bgLight2 bg-gb-bgDarkest text-gb-fgLight"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="modal-panel" data-panel="models">
+                        <div class="px-6 pt-5 pb-3 shrink-0 border-b border-gb-bgLight2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                                <h3 class="text-md font-bold text-gb-fgLightest">Tokens by Model</h3>
+                                <p class="text-xs text-gb-fgDark mt-1.5 leading-relaxed">Billed estimate: each turn counts its context in the form that was actually sent at the time.</p>
+                            </div>
+                            <div class="flex items-center gap-2 shrink-0">
+                                <input type="text" id="tc-model-filter" placeholder="Filter models..." class="bg-gb-bg border border-gb-bgLight2 text-gb-fgLight text-xs rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-gb-blueAccent font-mono placeholder-gb-bgLight3">
+                                <span id="tc-model-count" class="text-xs font-mono text-gb-fgDark">0 models</span>
+                            </div>
+                        </div>
+                        <div class="px-6 py-5 overflow-y-auto scrollbar-hide flex-1">
+                            <div class="overflow-x-auto rounded-lg border border-gb-bgLight2">
+                                <table class="w-full text-left text-xs font-mono">
+                                    <thead class="bg-gb-bg text-gb-fgDark uppercase tracking-wider text-[11px] border-b border-gb-bgLight2">
+                                        <tr>
+                                            <th class="p-3">Model</th>
+                                            <th class="p-3">Provider</th>
+                                            <th class="p-3 text-right text-gb-blueAccent">Inputted</th>
+                                            <th class="p-3 text-right text-gb-greenAccent">Outputted</th>
+                                            <th class="p-3 text-right text-gb-fgLightest">Total</th>
+                                            <th class="p-3 text-right text-gb-purpleAccent">Cost</th>
+                                            <th class="p-3 text-right text-gb-aquaAccent" title="Context tokens pruning kept off the bill">Saved</th>
+                                            <th class="p-3 text-right text-gb-fgDark">Turns</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tc-models-tbody" class="divide-y divide-gb-bgLight2 bg-gb-bgDarkest text-gb-fgLight"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="modal-panel" data-panel="pricing">
+                        <div class="px-6 pt-5 pb-3 shrink-0 border-b border-gb-bgLight2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                                <h3 class="text-md font-bold text-gb-fgLightest">Model Pricing</h3>
+                                <p class="text-xs text-gb-fgDark mt-1.5 leading-relaxed">Rates are per <b>1,000,000 tokens</b>, matching how providers publish them. Leave both fields at zero for models you do not want costed.</p>
+                            </div>
+                            <input type="text" id="tc-price-filter" placeholder="Filter models..." class="bg-gb-bg border border-gb-bgLight2 text-gb-fgLight text-xs rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-gb-blueAccent font-mono placeholder-gb-bgLight3 shrink-0">
+                        </div>
+                        <div id="tc-pricing-list" class="px-6 py-5 overflow-y-auto scrollbar-hide flex-1 flex flex-col gap-2"></div>
+                        <div class="px-6 py-3 border-t border-gb-bgLight2 bg-gb-bg flex items-center justify-between gap-3 shrink-0">
+                            <span id="tc-price-status" class="text-xs font-mono text-gb-fgDark truncate"></span>
+                            <button id="tc-price-save" class="px-4 py-2 rounded bg-gb-blue hover:bg-gb-blueAccent text-gb-bgDarkest text-sm font-bold transition-all transform hover:scale-105 active:scale-95 shrink-0">Save Prices</button>
+                        </div>
+                    </section>
+
+                </div>
+            </div>
+
+            <div class="p-4 border-t border-gb-bgLight2 bg-gb-bgDarkest rounded-b-xl flex justify-between items-center text-xs font-mono text-gb-fgDark shrink-0">
+                <span id="tc-cache-info">Calculated using model tokenizer encoding</span>
+                <button id="close-token-counter-done-btn" class="px-4 py-1.5 rounded bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-fgLight font-semibold transition-colors">
+                    Done
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Model Matrix Modal -->
+    <div id="model-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center opacity-0 pointer-events-none transition-all duration-300">
+        <div id="model-modal-box" class="bg-gb-bg border border-gb-bgLight2 rounded-xl max-w-4xl w-full h-[85vh] shadow-2xl transform translate-y-8 transition-all duration-300 flex flex-col">
+            <div class="p-6 border-b border-gb-bgLight2 flex justify-between items-center bg-gb-bgDarkest rounded-t-xl shrink-0">
+                <div class="flex items-center gap-3 text-gb-fgLightest font-bold text-lg min-w-0">
+                    <i data-lucide="cpu" class="w-6 h-6 text-gb-aquaAccent shrink-0"></i>
+                    <div class="flex flex-col min-w-0">
+                        <span id="model-modal-title">Select AI Model</span>
+                        <span id="model-modal-subtitle" class="text-xs font-normal text-gb-fgDark truncate">Used for chat completions</span>
+                    </div>
+                    <span id="model-modal-cost-warning" class="hidden flex items-center gap-1.5 text-[11px] font-semibold text-gb-redAccent bg-gb-red/20 border border-gb-red/30 rounded px-2 py-1 max-w-xs">
+                        <i data-lucide="alert-triangle" class="w-3.5 h-3.5 shrink-0"></i>
+                        <span class="leading-tight">Copilot model: each Auto Name run costs one premium interaction per chat.</span>
+                    </span>
+                </div>
+                <div class="flex items-center gap-4">
+                    <button id="show-hidden-models-btn" class="hidden text-xs text-gb-blueAccent hover:text-gb-fgLightest font-semibold transition-colors flex items-center gap-1 bg-gb-bgLight1 px-2 py-1 rounded">
+                        <i data-lucide="eye" class="w-3.5 h-3.5"></i> <span id="show-hidden-label">Show hidden</span>
+                    </button>
+                    <button id="close-model-modal-btn" class="text-gb-fgDark hover:text-gb-redAccent transition-colors rounded hover:bg-gb-bgLight1 p-1">
+                        <i data-lucide="x" class="w-6 h-6"></i>
+                    </button>
+                </div>
+            </div>
+            <div id="model-matrix-container" class="p-6 overflow-y-auto flex flex-col gap-8 scrollbar-hide flex-1"></div>
+        </div>
+    </div>
+
+    <!-- Manual Prune Drawer -->
+    <div id="prune-drawer-overlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 opacity-0 pointer-events-none transition-opacity duration-300"></div>
+    <aside id="prune-drawer" class="prune-drawer fixed top-0 right-0 h-full w-full sm:w-[540px] max-w-full bg-gb-bg border-l border-gb-bgLight2 shadow-2xl z-50 flex flex-col" aria-label="Manage context files" aria-hidden="true">
+        <div class="p-5 border-b border-gb-bgLight2 flex justify-between items-center bg-gb-bgDarkest shrink-0 gap-3">
+            <div class="flex items-center gap-3 text-gb-fgLightest font-bold text-lg min-w-0">
+                <i data-lucide="scissors" class="w-5 h-5 text-gb-aquaAccent shrink-0"></i>
+                <div class="flex flex-col min-w-0">
+                    <span>Manage Context Files</span>
+                    <span id="prune-drawer-subtitle" class="text-xs font-normal text-gb-fgDark truncate">All files in this thread</span>
+                </div>
+            </div>
+            <button id="prune-drawer-close" class="text-gb-fgDark hover:text-gb-redAccent transition-colors rounded hover:bg-gb-bgLight1 p-1 shrink-0" title="Close">
+                <i data-lucide="x" class="w-6 h-6"></i>
+            </button>
+        </div>
+
+        <div class="p-4 flex flex-col gap-3 border-b border-gb-bgLight2 shrink-0">
+            <div class="relative">
+                <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gb-fgDark pointer-events-none"></i>
+                <input type="text" id="prune-drawer-search" placeholder="Filter by path..." class="w-full bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-sm rounded pl-9 pr-3 py-2 outline-none focus:ring-1 focus:ring-gb-blueAccent focus:border-gb-blueAccent font-mono placeholder-gb-bgLight3">
+            </div>
+            <div class="flex items-center gap-2">
+                <select id="prune-drawer-sort" class="bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-xs rounded px-2 py-1.5 outline-none focus:ring-1 focus:ring-gb-blueAccent font-semibold">
+                    <option value="tokens">Sort: Token size</option>
+                    <option value="path">Sort: Path</option>
+                    <option value="ext">Sort: Extension</option>
+                    <option value="message">Sort: Message order</option>
+                </select>
+                <button id="prune-drawer-sortdir" class="bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight rounded p-1.5 hover:bg-gb-bgLight1 hover:border-gb-blueAccent transition-colors active:scale-95" title="Descending">
+                    <i data-lucide="arrow-down-wide-narrow" class="w-4 h-4"></i>
+                </button>
+                <label class="flex items-center gap-2 ml-auto text-xs text-gb-fgDark font-semibold cursor-pointer select-none shrink-0" for="prune-drawer-selectall">
+                    <input type="checkbox" id="prune-drawer-selectall" class="w-4 h-4 rounded border-gb-bgLight2 bg-gb-bgDarkest text-gb-blueAccent focus:ring-gb-blueAccent cursor-pointer">
+                    Select shown
+                </label>
+            </div>
+            <div id="prune-drawer-filters" class="flex flex-wrap items-center gap-1.5">
+                <button class="prune-chip prune-chip-active" data-filter="all">All</button>
+                <button class="prune-chip" data-filter="active">Active</button>
+                <button class="prune-chip" data-filter="pruned">Pruned</button>
+                <button class="prune-chip" data-filter="partial">Partial</button>
+                <button class="prune-chip" data-filter="duplicates">Duplicates</button>
+                <button id="prune-drawer-clear-scope" class="prune-chip ml-auto hidden" title="Stop scoping to a single message">Show all messages</button>
+            </div>
+        </div>
+
+        <div id="prune-drawer-summary" class="px-4 py-2 text-xs font-mono text-gb-fgDark border-b border-gb-bgLight2 shrink-0 truncate"></div>
+
+        <div id="prune-drawer-list" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2 scrollbar-hide"></div>
+
+        <div class="p-4 border-t border-gb-bgLight2 bg-gb-bgDarkest flex flex-col gap-3 shrink-0">
+            <input type="text" id="prune-drawer-reason" placeholder="Manually pruned by user" class="w-full bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-xs rounded px-3 py-2 outline-none focus:ring-1 focus:ring-gb-blueAccent font-mono placeholder-gb-bgLight3" title="Reason recorded in place of the file contents">
+            <div class="flex gap-2">
+                <button id="prune-drawer-prune" class="flex-1 px-3 py-2 rounded bg-gb-blue hover:bg-gb-blueAccent text-gb-bgDarkest text-sm font-bold transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2">
+                    <i data-lucide="scissors" class="w-4 h-4"></i> Prune selected
+                </button>
+                <button id="prune-drawer-restore" class="flex-1 px-3 py-2 rounded bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-fgLight text-sm font-semibold border border-gb-bgLight3 transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4 text-gb-greenAccent"></i> Restore selected
+                </button>
+                <button id="prune-drawer-restore-all" class="px-3 py-2 rounded bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-fgDark hover:text-gb-fgLightest border border-gb-bgLight3 transition-all active:scale-95 shrink-0" title="Restore every manually pruned file in this thread">
+                    <i data-lucide="list-restart" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+    </aside>
+
+    <script type="module" src="/static/js/main.js"></script>
+</body>
+</html>

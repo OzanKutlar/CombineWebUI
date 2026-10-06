@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradients -->
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#241a18" />
+      <stop offset="50%" stop-color="#1c1413" />
+      <stop offset="100%" stop-color="#120d0c" />
+    </linearGradient>
+    <linearGradient id="border-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fb4934" stop-opacity="0.7" />
+      <stop offset="50%" stop-color="#fe8019" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#fabd2f" stop-opacity="0.6" />
+    </linearGradient>
+
+    <!-- Atomic Ring Gradients -->
+    <linearGradient id="orbit-1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fb4934" />
+      <stop offset="45%" stop-color="#fe8019" />
+      <stop offset="100%" stop-color="#fabd2f" />
+    </linearGradient>
+    <linearGradient id="orbit-2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fabd2f" />
+      <stop offset="50%" stop-color="#fe8019" />
+      <stop offset="100%" stop-color="#fb4934" />
+    </linearGradient>
+    <linearGradient id="orbit-3" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#cc241d" />
+      <stop offset="50%" stop-color="#fe8019" />
+      <stop offset="100%" stop-color="#fabd2f" />
+    </linearGradient>
+
+    <!-- Core Fusion Gradients -->
+    <radialGradient id="core-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fabd2f" stop-opacity="0.45" />
+      <stop offset="35%" stop-color="#fe8019" stop-opacity="0.22" />
+      <stop offset="70%" stop-color="#fb4934" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#120d0c" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="core-burst" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="25%" stop-color="#fbf1c7" />
+      <stop offset="60%" stop-color="#fabd2f" />
+      <stop offset="100%" stop-color="#fb4934" />
+    </linearGradient>
+
+    <!-- Glow Filter -->
+    <filter id="atomic-glow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="7" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Base Squircle Background -->
+  <rect width="512" height="512" rx="118" fill="url(#bg-grad)" stroke="#382420" stroke-width="6" />
+  <rect x="10" y="10" width="492" height="492" rx="108" fill="none" stroke="url(#border-grad)" stroke-width="2.5" opacity="0.85" />
+
+  <!-- Ambient Thermal Radiation Halo -->
+  <circle cx="256" cy="256" r="210" fill="url(#core-glow)" filter="url(#atomic-glow)" />
+
+  <!-- Subatomic Particle Constellation Ring -->
+  <g opacity="0.28" stroke="#fabd2f" stroke-width="2" stroke-dasharray="4 10" fill="none">
+    <circle cx="256" cy="256" r="205" />
+    <circle cx="256" cy="256" r="135" stroke="#fe8019" stroke-dasharray="3 8" />
+  </g>
+
+  <!-- ================= ATOMIC ORBITAL SHELLS ================= -->
+  <g filter="url(#atomic-glow)">
+    <!-- Orbit 1: Diagonal Right-Leaning (-35deg) -->
+    <ellipse cx="256" cy="256" rx="182" ry="64" fill="none" stroke="url(#orbit-1)" stroke-width="16" stroke-linecap="round" transform="rotate(-35 256 256)" />
+
+    <!-- Orbit 2: Diagonal Left-Leaning (+35deg) -->
+    <ellipse cx="256" cy="256" rx="182" ry="64" fill="none" stroke="url(#orbit-2)" stroke-width="16" stroke-linecap="round" transform="rotate(35 256 256)" />
+
+    <!-- Orbit 3: Vertical Planetary Shell (90deg) -->
+    <ellipse cx="256" cy="256" rx="182" ry="64" fill="none" stroke="url(#orbit-3)" stroke-width="16" stroke-linecap="round" transform="rotate(90 256 256)" />
+
+    <!-- ================= ORBITING ELECTRONS / PARTICLES ================= -->
+    <!-- Electron 1 (Top-Left Track) -->
+    <circle cx="134" cy="170" r="22" fill="#fe8019" opacity="0.35" />
+    <circle cx="134" cy="170" r="14" fill="#fabd2f" />
+    <circle cx="134" cy="170" r="6" fill="#ffffff" />
+
+    <!-- Electron 2 (Top-Right Track) -->
+    <circle cx="378" cy="170" r="22" fill="#fb4934" opacity="0.35" />
+    <circle cx="378" cy="170" r="14" fill="#fe8019" />
+    <circle cx="378" cy="170" r="6" fill="#fbf1c7" />
+
+    <!-- Electron 3 (Bottom-Center Track) -->
+    <circle cx="256" cy="438" r="24" fill="#fabd2f" opacity="0.4" />
+    <circle cx="256" cy="438" r="15" fill="#fabd2f" />
+    <circle cx="256" cy="438" r="7" fill="#ffffff" />
+
+    <!-- Satellite Quantum Sparks -->
+    <circle cx="395" cy="315" r="8" fill="#fabd2f" />
+    <circle cx="117" cy="315" r="8" fill="#fb4934" />
+    <circle cx="256" cy="74" r="10" fill="#fe8019" />
+    <circle cx="256" cy="74" r="4" fill="#ffffff" />
+
+    <!-- ================= QUANTUM FUSION NUCLEUS ================= -->
+    <!-- Secondary Rotated Radiant Diamond (45deg) -->
+    <path d="M 256 188 C 256 226 230 256 192 256 C 230 256 256 286 256 324 C 256 286 282 256 320 256 C 282 256 256 226 256 188 Z" fill="#fe8019" opacity="0.75" transform="rotate(45 256 256)" />
+
+    <!-- Primary 4-Point Core Starburst -->
+    <path d="M 256 162 C 256 218 220 256 164 256 C 220 256 256 294 256 350 C 256 294 292 256 348 256 C 292 256 256 218 256 162 Z" fill="url(#core-burst)" />
+
+    <!-- Inner Nuclear Sphere & White-Hot Nucleus -->
+    <circle cx="256" cy="256" r="28" fill="#fe8019" opacity="0.9" />
+    <circle cx="256" cy="256" r="18" fill="#fabd2f" />
+    <circle cx="256" cy="256" r="9" fill="#ffffff" />
+  </g>
+</svg>
