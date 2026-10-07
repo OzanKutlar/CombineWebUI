@@ -6,6 +6,11 @@ export const STORAGE_KEY_HIDDEN = 'copilot_hidden_models_v1';
 export const STORAGE_KEY_SIDEBAR_VIEW_MODE = 'copilot_sidebar_view_mode_v1';
 export const STORAGE_KEY_THINKING_PREFS = 'copilot_thinking_prefs_v1';
 export const STORAGE_KEY_PRESERVE_MODELS = 'copilot_preserve_thinking_models_v1';
+export const STORAGE_KEY_FAVORITE_MODELS = 'copilot_favorite_models_v1';
+
+// Header favorites bar. Favorites whose endpoint is offline or that are hidden
+// still count toward the cap, because they are kept so they can reappear.
+export const MAX_FAVORITE_MODELS = 12;
 
 // NOTE: this key is also hardcoded in the pre-paint bootstrap script in
 // index.html, which cannot import from here without reintroducing a flash of

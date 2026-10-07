@@ -65,6 +65,16 @@ function resolveProvider(modelId) {
     return null;
 }
 
+/**
+ * Provider logo URL for a model, or '' when it has none. This is the single
+ * definition of "has an icon" for avatars, the selector and favorites.
+ */
+export function getModelLogo(modelId) {
+    if (!modelId || typeof modelId !== 'string') return '';
+    const provider = resolveProvider(modelId);
+    return (provider && typeof provider.logo === 'string') ? provider.logo : '';
+}
+
 function createBlob(modelId) {
     const short = deriveShortName(modelId);
     const token = pickBlobToken(modelId);

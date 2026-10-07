@@ -14,6 +14,8 @@ import {
     CHAT_STORE,
     STORAGE_KEY_THINKING_PREFS,
     STORAGE_KEY_PRESERVE_MODELS,
+    STORAGE_KEY_FAVORITE_MODELS,
+    MAX_FAVORITE_MODELS,
     STORAGE_KEY_THEME,
     DEFAULT_THEME,
     DEFAULT_THINKING_PREFS,
@@ -50,6 +52,24 @@ function loadPreserveModels() {
     return raw;
 }
 
+/** Unique non-empty ids in their original order, capped. Shared with sync.js. */
+export function sanitizeFavoriteModels(raw) {
+    if (!Array.isArray(raw)) return [];
+    const seen = new Set();
+    const result = [];
+    for (let i = 0; i < raw.length && result.length < MAX_FAVORITE_MODELS; i++) {
+        const id = raw[i];
+        if (typeof id !== 'string' || !id || seen.has(id)) continue;
+        seen.add(id);
+        result.push(id);
+    }
+    return result;
+}
+
+function loadFavoriteModels() {
+    return sanitizeFavoriteModels(safeParse(localStorage.getItem(STORAGE_KEY_FAVORITE_MODELS), []));
+}
+
 export const store = {
     conversations: [],
     folders: [],
@@ -61,6 +81,7 @@ export const store = {
     hiddenModels: safeParse(localStorage.getItem(STORAGE_KEY_HIDDEN), []),
     thinkingPrefs: loadThinkingPrefs(),
     preserveModels: loadPreserveModels(),
+    favoriteModels: loadFavoriteModels(),
     allModels: [],
     allProviders: [],
     isProcessing: false,
@@ -87,6 +108,7 @@ export function saveUIPreferencesToBackend() {
             selected_model: store.selectedModel,
             auto_name_model: store.autoNameModel,
             preserve_thinking_models: store.preserveModels,
+            favorite_models: store.favoriteModels,
             thinking_prefs: store.thinkingPrefs,
             theme: store.theme
         };
@@ -120,6 +142,11 @@ export async function syncUIPreferencesFromBackend() {
         if (prefs.preserve_thinking_models && typeof prefs.preserve_thinking_models === 'object') {
             store.preserveModels = prefs.preserve_thinking_models;
             localStorage.setItem(STORAGE_KEY_PRESERVE_MODELS, JSON.stringify(store.preserveModels));
+        }
+        // Servers that predate favorites omit the key, so the local list is kept.
+        if (Array.isArray(prefs.favorite_models)) {
+            store.favoriteModels = sanitizeFavoriteModels(prefs.favorite_models);
+            localStorage.setItem(STORAGE_KEY_FAVORITE_MODELS, JSON.stringify(store.favoriteModels));
         }
         if (prefs.thinking_prefs && typeof prefs.thinking_prefs === 'object') {
             store.thinkingPrefs = Object.assign({}, DEFAULT_THINKING_PREFS, prefs.thinking_prefs);
@@ -215,6 +242,41 @@ export function setPreserveEnabled(modelId, enabled) {
         delete store.preserveModels[modelId];
     }
     persistPreserveModels();
+}
+
+// ---------------------------------------------------------------------------
+// Favorite models (header quick-switch bar)
+// ---------------------------------------------------------------------------
+
+export function persistFavoriteModels() {
+    try {
+        localStorage.setItem(STORAGE_KEY_FAVORITE_MODELS, JSON.stringify(store.favoriteModels));
+    } catch (e) {
+        console.warn('Could not cache favorite models locally', e);
+    }
+    saveUIPreferencesToBackend();
+}
+
+export function isFavoriteModel(modelId) {
+    if (!modelId || typeof modelId !== 'string') return false;
+    return Array.isArray(store.favoriteModels) && store.favoriteModels.includes(modelId);
+}
+
+/**
+ * Adds or removes a favorite. Returns false only when adding would exceed
+ * MAX_FAVORITE_MODELS (or the id is invalid), so callers can explain why.
+ */
+export function toggleFavoriteModel(modelId) {
+    if (!modelId || typeof modelId !== 'string') return false;
+    const current = Array.isArray(store.favoriteModels) ? store.favoriteModels : [];
+    if (current.includes(modelId)) {
+        store.favoriteModels = current.filter(id => id !== modelId);
+    } else {
+        if (current.length >= MAX_FAVORITE_MODELS) return false;
+        store.favoriteModels = current.concat([modelId]);
+    }
+    persistFavoriteModels();
+    return true;
 }
 
 // ---------------------------------------------------------------------------

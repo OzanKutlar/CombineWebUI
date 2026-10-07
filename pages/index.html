@@ -112,6 +112,7 @@
             </div>
             <div class="flex items-center gap-4 sm:gap-6 w-full sm:w-auto justify-between sm:justify-end flex-wrap sm:flex-nowrap">
                 <div class="flex items-center gap-2 self-end mb-0.5">
+                    <div id="favorite-models-bar" class="hidden flex items-center gap-1.5 pr-2 mr-0.5 border-r border-gb-bgLight2" role="toolbar" aria-label="Favorite models"></div>
                     <button id="auto-folder-btn" class="hidden text-xs bg-gb-aquaAccent hover:bg-gb-greenAccent text-gb-bgDarkest font-bold py-2 px-3 rounded flex items-center gap-1.5 transition-all shadow-sm hover:scale-105 active:scale-95 whitespace-nowrap" title="Organize unsorted chats into folders with AI">
                         <i data-lucide="folder-tree" class="w-3.5 h-3.5"></i> Auto Folder
                     </button>
@@ -130,8 +131,11 @@
                         Model Selection
                     </label>
                     <button id="model-select-btn" class="bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent focus:border-gb-blueAccent flex w-full sm:w-64 p-2 shadow-sm font-medium outline-none justify-between items-center transition-colors hover:bg-gb-bgLight1">
-                        <span id="selected-model-text" class="truncate">Loading models...</span>
-                        <i data-lucide="chevron-down" class="w-4 h-4 text-gb-fgDark"></i>
+                        <span class="flex items-center gap-2 min-w-0">
+                            <img id="selected-model-icon" alt="" class="hidden w-5 h-5 rounded-sm object-contain bg-white p-0.5 shrink-0">
+                            <span id="selected-model-text" class="truncate">Loading models...</span>
+                        </span>
+                        <i data-lucide="chevron-down" class="w-4 h-4 text-gb-fgDark shrink-0"></i>
                     </button>
                 </div>
                 <div class="flex items-center gap-4 mt-4 sm:mt-0 pt-3 sm:pt-0 shrink-0 self-end mb-0.5">

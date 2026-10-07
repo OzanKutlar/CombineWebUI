@@ -1428,3 +1428,74 @@ body {
         transition: none !important;
     }
 }
+
+/* Header favorite models bar.
+
+   Square icon-only buttons sized to match the Auto Folder / Auto Name buttons.
+   The logo's white plate comes from utility classes in models.js, mirroring
+   the chat avatars, so no literal colour is needed here. */
+.fav-model-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    padding: 0;
+    border-radius: 6px;
+    border: 1px solid rgb(var(--gb-bg-light-2));
+    background: rgb(var(--gb-bg-darkest));
+    cursor: pointer;
+    box-shadow: var(--gb-shadow-sm, none);
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.fav-model-btn:hover {
+    background: rgb(var(--gb-bg-light-1));
+    border-color: rgb(var(--gb-blue-accent));
+    transform: scale(1.06);
+}
+
+.fav-model-btn:active {
+    transform: scale(0.95);
+}
+
+.fav-model-btn:focus-visible {
+    outline: 2px solid rgb(var(--gb-blue-accent));
+    outline-offset: 1px;
+}
+
+.fav-model-btn-active,
+.fav-model-btn-active:hover {
+    border-color: rgb(var(--gb-blue-accent));
+    background: rgb(var(--gb-blue-accent) / 0.14);
+    box-shadow: 0 0 0 2px rgb(var(--gb-blue-accent) / 0.45);
+    cursor: default;
+    transform: none;
+}
+
+/* Matrix card favorite star. Lucide icons are stroke-only, so the on state
+   fills the path with the current colour. */
+.model-fav-star-on {
+    color: rgb(var(--gb-yellow-accent));
+}
+
+.model-fav-star-on svg {
+    fill: currentColor;
+}
+
+.model-fav-star-disabled {
+    color: rgb(var(--gb-bg-light-3));
+    cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .fav-model-btn {
+        transition: none !important;
+    }
+
+    .fav-model-btn:hover,
+    .fav-model-btn:active {
+        transform: none;
+    }
+}

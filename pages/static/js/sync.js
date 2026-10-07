@@ -1,11 +1,11 @@
-import { store, getActiveConversation, persistActiveConvId } from './storage.js';
+import { store, getActiveConversation, persistActiveConvId, sanitizeFavoriteModels } from './storage.js';
 import { renderSidebar } from './sidebar.js';
 import { renderChat, updateHeaderTitle } from './chat.js';
 import { updateTokenCount } from './tokens.js';
 import { renderModelMatrix, updateSelectedModelUI } from './models.js';
 import { applyActiveTokenLimit } from './tokens.js';
 import { applyTheme, normalizeTheme } from './theme.js';
-import { STORAGE_KEY_THEME } from './config.js';
+import { STORAGE_KEY_THEME, STORAGE_KEY_FAVORITE_MODELS } from './config.js';
 
 let eventSource = null;
 let reconnectTimer = null;
@@ -119,6 +119,15 @@ function handleUIPreferencesUpdated(prefs) {
     }
     if (prefs.preserve_thinking_models && typeof prefs.preserve_thinking_models === 'object') {
         store.preserveModels = prefs.preserve_thinking_models;
+    }
+    // The renderModelMatrix call below repaints the favorites bar.
+    if (Array.isArray(prefs.favorite_models)) {
+        store.favoriteModels = sanitizeFavoriteModels(prefs.favorite_models);
+        try {
+            localStorage.setItem(STORAGE_KEY_FAVORITE_MODELS, JSON.stringify(store.favoriteModels));
+        } catch (e) {
+            console.warn('Could not cache synced favorite models locally', e);
+        }
     }
     if (prefs.thinking_prefs && typeof prefs.thinking_prefs === 'object') {
         store.thinkingPrefs = Object.assign({}, store.thinkingPrefs, prefs.thinking_prefs);

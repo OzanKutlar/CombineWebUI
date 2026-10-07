@@ -1,4 +1,6 @@
-import { store, persistSelectedModel, persistHiddenModels, persistAutoNameModel, isPreserveEnabled, setPreserveEnabled } from './storage.js';
+import { store, persistSelectedModel, persistHiddenModels, persistAutoNameModel, isPreserveEnabled, setPreserveEnabled, isFavoriteModel, toggleFavoriteModel } from './storage.js';
+import { getModelLogo } from './avatar.js';
+import { MAX_FAVORITE_MODELS } from './config.js';
 import { applyActiveTokenLimit, updateTokenCount } from './tokens.js';
 import { getAutoNameCandidates, resolveAutoNameModel, isCopilotNamingModel } from './autoName.js';
 
@@ -90,18 +92,169 @@ export function isStreamingModel(modelId) {
     return model.stream_enabled !== false;
 }
 
+/**
+ * Shows the selected model's provider logo beside its name. Models without a
+ * logo get no icon at all rather than the name-pill fallback, which would only
+ * repeat the text next to it.
+ */
+function setSelectedModelIcon(modelId) {
+    const icon = document.getElementById('selected-model-icon');
+    if (!icon) return;
+    const logo = (typeof modelId === 'string' && modelId) ? getModelLogo(modelId) : '';
+    // A logo that already failed to load stays hidden until its URL changes.
+    if (!logo || icon.dataset.failedSrc === logo) {
+        icon.classList.add('hidden');
+        return;
+    }
+    icon.onerror = () => {
+        icon.dataset.failedSrc = logo;
+        icon.classList.add('hidden');
+    };
+    if (icon.getAttribute('src') !== logo) icon.setAttribute('src', logo);
+    icon.title = modelId;
+    icon.classList.remove('hidden');
+}
+
 export function updateSelectedModelUI() {
     const btnText = document.getElementById('selected-model-text');
+    const model = store.allModels.find(m => m && m.id === store.selectedModel) || null;
+    setSelectedModelIcon(model ? model.id : '');
+    renderFavoriteModels();
     if (!btnText) return;
-    const model = store.allModels.find(m => m.id === store.selectedModel);
     if (!model) {
         btnText.textContent = 'Select a model...';
+        btnText.title = '';
         return;
     }
     // Only metered models carry a multiplier label.
     btnText.textContent = model.multiplier_label
         ? `${model.id} (${model.multiplier_label})`
         : model.id;
+    btnText.title = model.id;
+}
+
+/**
+ * Switches the chat model. Shared by the picker and the favorites bar so both
+ * persist, re-limit and repaint identically. Returns false for unknown ids.
+ */
+export function selectChatModel(modelId) {
+    if (!modelId || typeof modelId !== 'string') return false;
+    if (!store.allModels.some(m => m && m.id === modelId)) return false;
+    store.selectedModel = modelId;
+    persistSelectedModel();
+    applyActiveTokenLimit();
+    updateSelectedModelUI();
+    renderModelMatrix();
+    updateTokenCount();
+    return true;
+}
+
+/** Favorites that can be drawn right now: present, visible and with a logo. */
+function getRenderableFavorites() {
+    const favorites = Array.isArray(store.favoriteModels) ? store.favoriteModels : [];
+    const entries = [];
+    favorites.forEach(id => {
+        if (store.hiddenModels.includes(id)) return;
+        const model = store.allModels.find(m => m && m.id === id);
+        // Absent from the model list means its endpoint is offline. The id is
+        // kept in storage so the button returns once the endpoint is back.
+        if (!model) return;
+        const logo = getModelLogo(id);
+        if (!logo) return;
+        entries.push({ model, logo });
+    });
+    return entries;
+}
+
+function favoriteTooltip(model, isActive) {
+    const label = model.display_name || model.id;
+    const parts = [label];
+    if (label !== model.id) parts.push(model.id);
+    if (model.endpoint_name) parts.push('Hosted by ' + model.endpoint_name);
+    if (model.multiplier_label) parts.push('Multiplier: ' + model.multiplier_label);
+    parts.push(isActive ? 'Current chat model' : 'Click to switch to this model');
+    return parts.join('\n');
+}
+
+function onFavoriteClick(modelId) {
+    if (!modelId || modelId === store.selectedModel) return;
+    // Same guard as the picker: switching mid-stream breaks the request.
+    if (store.isProcessing) {
+        alert('Please stop the current generation before changing models.');
+        return;
+    }
+    selectChatModel(modelId);
+}
+
+function createFavoriteButton(entry) {
+    const model = entry.model;
+    const isActive = model.id === store.selectedModel;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = isActive ? 'fav-model-btn fav-model-btn-active' : 'fav-model-btn';
+    btn.title = favoriteTooltip(model, isActive);
+    btn.setAttribute('aria-label', (model.display_name || model.id) + (isActive ? ' (current model)' : ''));
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    btn.onclick = () => onFavoriteClick(model.id);
+
+    const img = document.createElement('img');
+    img.src = entry.logo;
+    img.alt = '';
+    img.className = 'w-5 h-5 rounded-sm object-contain bg-white p-0.5 pointer-events-none';
+    // A broken logo would leave an empty square, so the button goes instead.
+    img.onerror = () => {
+        const bar = btn.parentElement;
+        btn.remove();
+        if (bar && bar.childElementCount === 0) bar.classList.add('hidden');
+    };
+    btn.appendChild(img);
+    return btn;
+}
+
+/** Repaints the header favorites bar and hides it when nothing is renderable. */
+export function renderFavoriteModels() {
+    const bar = document.getElementById('favorite-models-bar');
+    if (!bar) return;
+    bar.innerHTML = '';
+    const entries = getRenderableFavorites();
+    bar.classList.toggle('hidden', entries.length === 0);
+    entries.forEach(entry => bar.appendChild(createFavoriteButton(entry)));
+}
+
+/**
+ * Star toggle for a matrix card. Models without a logo get a greyed-out star
+ * that only explains the rule, since they would have nothing to show in the bar.
+ * aria-disabled is used instead of disabled so the tooltip still shows and the
+ * click cannot fall through to selecting the card.
+ */
+function createFavoriteStar(modelId) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.innerHTML = '<i data-lucide="star" class="w-3.5 h-3.5"></i>';
+
+    if (!getModelLogo(modelId)) {
+        btn.className = 'model-fav-star-disabled transition-opacity p-1 rounded shrink-0 opacity-0 group-hover:opacity-100';
+        btn.title = 'Only models with a provider icon can be favorited. Assign one under Settings > Providers.';
+        btn.setAttribute('aria-disabled', 'true');
+        btn.onclick = (e) => e.stopPropagation();
+        return btn;
+    }
+
+    const isFav = isFavoriteModel(modelId);
+    btn.className = isFav
+        ? 'model-fav-star-on transition-opacity p-1 rounded hover:bg-gb-bgLight2 shrink-0 opacity-100'
+        : 'transition-opacity p-1 rounded hover:bg-gb-bgLight2 shrink-0 text-gb-fgDark opacity-0 group-hover:opacity-100 hover:text-gb-yellowAccent';
+    btn.title = isFav ? 'Remove from favorites' : 'Add to favorites (one-click switch button in the header)';
+    btn.setAttribute('aria-pressed', isFav ? 'true' : 'false');
+    btn.onclick = (e) => {
+        e.stopPropagation();
+        if (!toggleFavoriteModel(modelId)) {
+            alert(`You can have up to ${MAX_FAVORITE_MODELS} favorite models, including ones that are hidden or whose endpoint is offline. Remove one first.`);
+            return;
+        }
+        renderModelMatrix();
+    };
+    return btn;
 }
 
 export async function fetchModels() {
@@ -132,6 +285,7 @@ export async function fetchModels() {
     } catch (e) {
         console.error('Failed to fetch models', e);
         if (btnText) btnText.textContent = 'Error loading models';
+        setSelectedModelIcon('');
     }
 }
 
@@ -254,6 +408,12 @@ export function renderModelMatrix() {
             idRow.textContent = m.id;
             bottomRow.appendChild(idRow);
 
+            // Favorites are a chat-model shortcut, so they are not offered
+            // while picking a naming model.
+            if (activePickerMode !== PICKER_MODE_AUTONAME) {
+                bottomRow.appendChild(createFavoriteStar(m.id));
+            }
+
             // Per-model thinking preservation. Off unless explicitly enabled.
             const preserveOn = isPreserveEnabled(m.id);
             const preserveBtn = document.createElement('button');
@@ -316,6 +476,7 @@ export function renderModelMatrix() {
     });
 
     renderAutoNameControls();
+    renderFavoriteModels();
     lucide.createIcons();
 }
 
@@ -369,12 +530,7 @@ function applyPickerSelection(modelId) {
         return;
     }
 
-    store.selectedModel = modelId;
-    persistSelectedModel();
-    applyActiveTokenLimit();
-    updateSelectedModelUI();
-    renderModelMatrix();
-    updateTokenCount();
+    selectChatModel(modelId);
     closeModelModal();
 }
 
