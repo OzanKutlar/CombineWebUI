@@ -175,28 +175,40 @@ function activeModelPrunes(msg) {
 }
 
 /**
+ * The prune set this message should carry: the model's active set plus the
+ * user's manual set, as normalized path -> reason. What is actually sent to a
+ * given model may lag behind it while that model's cache is warm; see
+ * pruneCache.js.
+ */
+export function desiredPrunePaths(msg) {
+    const applySet = activeModelPrunes(msg);
+    const manual = msg ? msg.manualPrunedPaths : null;
+    if (manual && typeof manual === 'object') {
+        Object.keys(manual).forEach(k => applySet.set(normalizePath(k), sanitizeReason(manual[k])));
+    }
+    return applySet;
+}
+
+/** Baseline text with exactly `pathMap` (path -> reason) pruned. Non-mutating. */
+export function buildContentForPaths(msg, pathMap) {
+    const baseline = readBaseline(msg);
+    if (!baseline) return (msg && typeof msg.content === 'string') ? msg.content : '';
+    if (!(pathMap instanceof Map) || pathMap.size === 0) return baseline;
+
+    const files = [];
+    pathMap.forEach((reason, path) => files.push({ path, stay: false, reason }));
+    return pruneFilesFromContent(baseline, files) || baseline;
+}
+
+/**
  * Recomputes `msg.content` from the baseline. Idempotent, and the only place
  * pruning is allowed to assign to `content`. Returns true when it changed.
  */
 export function rebuildMessageContent(msg) {
     if (!msg || msg.role !== 'user' || typeof msg.content !== 'string') return false;
+    if (!readBaseline(msg)) return false;
 
-    const baseline = readBaseline(msg);
-    if (!baseline) return false;
-
-    const applySet = activeModelPrunes(msg);
-    const manual = msg.manualPrunedPaths;
-    if (manual && typeof manual === 'object') {
-        Object.keys(manual).forEach(k => applySet.set(normalizePath(k), sanitizeReason(manual[k])));
-    }
-
-    let next = baseline;
-    if (applySet.size > 0) {
-        const files = [];
-        applySet.forEach((reason, path) => files.push({ path, stay: false, reason }));
-        next = pruneFilesFromContent(baseline, files) || baseline;
-    }
-
+    const next = buildContentForPaths(msg, desiredPrunePaths(msg));
     if (msg.content === next) return false;
     msg.content = next;
     return true;

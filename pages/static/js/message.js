@@ -23,6 +23,7 @@ import { extractAllExecutionPayloads, stripExecutionBlocks } from './execution.j
 import { extractAllPrunePayloads } from './prune.js';
 import { getSelectItems } from './selectPayload.js';
 import { enhanceCodeBlocks } from './codeblock.js';
+import { getPendingSummary, countPendingAt, requestPruneCommit, formatCountdown } from './pruneCache.js';
 
 export { copyTextToClipboard } from './messageActions.js';
 
@@ -514,6 +515,54 @@ function formatCount(value, approx, sign) {
  * Compact card for a detected PRUNE payload matching the layout of the Execution card,
  * showing individual dropped files, reason, token savings, and context toggle.
  */
+function buildApplyNowButton(conv) {
+    const btn = document.createElement('button');
+    btn.className = 'px-2.5 py-1 rounded bg-gb-bgLight2 hover:bg-gb-bgLight3 text-gb-fgLight border border-gb-bgLight3 font-bold transition-all active:scale-95 flex items-center gap-1.5 shrink-0';
+    btn.innerHTML = '<i data-lucide="zap" class="w-3.5 h-3.5 text-gb-yellowAccent"></i> Apply now';
+    btn.title = 'Break the cache and send these files pruned on the next request';
+    btn.onclick = () => {
+        if (store.isProcessing) {
+            alert('Please stop the current generation before changing the context.');
+            return;
+        }
+        if (!requestPruneCommit(conv)) return;
+        saveHistory();
+        renderChat(true);
+        updateTokenCount();
+    };
+    return btn;
+}
+
+/**
+ * Status strip shown on a prune card while some of its files are held back
+ * because the selected model's prompt cache is warm.
+ */
+function buildPruneStatusRow(pruneInfo) {
+    if (!pruneInfo || pruneInfo.isPruned === false) return null;
+    const conv = getActiveConversation();
+    const modelId = store.selectedModel;
+    if (!conv || !modelId) return null;
+
+    const indices = Array.isArray(pruneInfo.targetIndices) ? pruneInfo.targetIndices : [];
+    const summary = getPendingSummary(conv, modelId, Date.now());
+    const pending = countPendingAt(summary, indices);
+    if (pending === 0) return null;
+
+    const row = document.createElement('div');
+    row.className = 'px-4 py-2 flex items-center justify-between gap-3 border-b border-gb-bgLight2 text-xs font-mono bg-gb-yellowAccent/10';
+
+    const files = `${pending} file${pending === 1 ? '' : 's'}`;
+    const label = document.createElement('span');
+    label.className = 'text-gb-yellowAccent min-w-0 whitespace-normal break-words';
+    label.textContent = summary.commitRequested
+        ? `${files} pending \u00b7 applies on the next send`
+        : `${files} pending \u00b7 ${deriveShortName(modelId)} cache is warm \u00b7 applies in ~${formatCountdown(summary.secondsLeft)}, on a model switch, or now`;
+    row.appendChild(label);
+
+    if (!summary.commitRequested) row.appendChild(buildApplyNowButton(conv));
+    return row;
+}
+
 function createPruneCard(item, msg, fallbackRaw) {
     const card = document.createElement('div');
     card.className = 'mt-2 mb-2 bg-gb-bgDarkest border border-gb-bgLight2 rounded-lg overflow-hidden shadow-sm not-prose';
@@ -561,6 +610,13 @@ function createPruneCard(item, msg, fallbackRaw) {
     header.appendChild(infoDiv);
     header.appendChild(actionsDiv);
     card.appendChild(header);
+
+    // The status covers the whole payload set, so only the first card shows it.
+    const items = Array.isArray(pruneInfo.items) ? pruneInfo.items : [];
+    if (items.indexOf(item) <= 0) {
+        const statusRow = buildPruneStatusRow(msg.pruneInfo);
+        if (statusRow) card.appendChild(statusRow);
+    }
 
     if (dropped.length > 0) {
         const list = document.createElement('div');

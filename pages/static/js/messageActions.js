@@ -75,6 +75,8 @@ function buildEditButton(msg, contentDiv) {
             delete msg.manualPrunedPaths;
             delete msg.modelPrunedPaths;
             delete msg.modelPruneActive;
+            // The edited text was never sent, so no cache holds it.
+            delete msg.sentPrunes;
             // `active` was never defined in this scope, so saving an edit threw.
             const editConv = getActiveConversation();
             if (editConv) touchConversation(editConv.id);
@@ -153,6 +155,7 @@ function buildRerunButton(msg, contentDiv, isUser) {
                 delete msg.manualPrunedPaths;
                 delete msg.modelPrunedPaths;
                 delete msg.modelPruneActive;
+                delete msg.sentPrunes;
             }
         }
 

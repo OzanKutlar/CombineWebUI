@@ -714,6 +714,13 @@ body {
     border-color: rgb(var(--gb-purple) / 0.4);
 }
 
+.prune-badge-pending {
+    color: rgb(var(--gb-yellow-accent));
+    background: rgb(var(--gb-yellow-accent) / 0.08);
+    border-color: rgb(var(--gb-yellow-accent) / 0.5);
+    border-style: dashed;
+}
+
 .prune-badge-jump {
     color: rgb(var(--gb-blue-accent));
     background: rgb(var(--gb-blue-accent) / 0.12);

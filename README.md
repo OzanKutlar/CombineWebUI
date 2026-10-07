@@ -8,6 +8,7 @@ A self-hosted chat interface for any **OpenAI-compatible API**. CombineWebUI has
 - **Multiple responses per turn.** Ask several models the same question and switch between their replies as tabs.
 - **Thinking traces.** Reasoning fields and inline `<think>` blocks are captured and shown in a collapsible panel. You can choose per model whether to replay them into context.
 - **Context pruning.** A drawer for removing large file blocks from earlier messages. AI-requested `PRUNE` payloads are honoured too.
+- **Cache-aware pruning.** New prunes are held back while the target model's prompt cache is warm, then applied once it cools, on a model switch, near the context limit, or on demand. The policy and cache TTL are set per endpoint.
 - **Payload cards.** `EXECUTION`, `PRUNE` and `SELECT` payloads from combineCopy-style prompts render as compact cards with diff stats.
 - **Token counter.** Per-model and per-provider totals, trend charts and cost estimates from your own price table.
 - **Auto Name and Auto Folder.** Uses any configured model, and warns before using a metered one.

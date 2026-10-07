@@ -1,5 +1,6 @@
-import { DEFAULT_TOKEN_LIMIT } from './config.js';
+import { DEFAULT_TOKEN_LIMIT, PENDING_REFRESH_MS, PRUNE_PENDING_EVENT } from './config.js';
 import { store, getActiveConversation, getStoredTokenLimit, saveModelTokenLimit } from './storage.js';
+import { getPendingSummary, formatCountdown } from './pruneCache.js';
 
 export function countTokens(text) {
     return Math.ceil((text || '').length / 4);
@@ -43,6 +44,68 @@ function setTokenLimitExceededState(isExceeded) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Pending (cache-deferred) prune display
+// ---------------------------------------------------------------------------
+
+// What the counter last showed, without the pending suffix, so the countdown
+// can refresh without recounting the thread or hitting the server.
+let baseTokenText = '';
+let pendingTimer = null;
+let hadPending = false;
+
+function pendingSuffix(summary) {
+    const tokens = summary.tokens.toLocaleString();
+    if (summary.commitRequested) {
+        return ` \u2022 +${tokens} tok held for cache, pruned on next send`;
+    }
+    return ` \u2022 +${tokens} tok held for cache (prune pending, ${formatCountdown(summary.secondsLeft)})`;
+}
+
+function readPendingSummary() {
+    try {
+        return getPendingSummary(getActiveConversation(), store.selectedModel, Date.now());
+    } catch (e) {
+        console.warn('Failed to compute pending prunes', e);
+        return null;
+    }
+}
+
+function syncPendingTimer(hasPending) {
+    if (hasPending && !pendingTimer) {
+        pendingTimer = setInterval(refreshPendingDisplay, PENDING_REFRESH_MS);
+    } else if (!hasPending && pendingTimer) {
+        clearInterval(pendingTimer);
+        pendingTimer = null;
+    }
+}
+
+/** Lets prune cards repaint when pending prunes appear or the cache cools. */
+function notifyPendingTransition(hasPending) {
+    if (hasPending === hadPending) return;
+    hadPending = hasPending;
+    try {
+        window.dispatchEvent(new CustomEvent(PRUNE_PENDING_EVENT, { detail: { hasPending } }));
+    } catch (e) {
+        console.warn('Failed to dispatch the pending prune event', e);
+    }
+}
+
+function refreshPendingDisplay() {
+    const tokenCount = document.getElementById('token-count');
+    if (!tokenCount) return;
+    const summary = readPendingSummary();
+    const hasPending = Boolean(summary) && summary.count > 0;
+    tokenCount.textContent = baseTokenText + (hasPending ? pendingSuffix(summary) : '');
+    syncPendingTimer(hasPending);
+    notifyPendingTransition(hasPending);
+}
+
+function setTokenText(text) {
+    baseTokenText = text;
+    refreshPendingDisplay();
+}
+
 let tokenCalcTimeout = null;
 
 export function updateTokenCount() {
@@ -70,7 +133,7 @@ export function updateTokenCount() {
     if (totalSaved > 0) {
         displayTxt += ` \u2022 Would be ${(roughTokens + totalSaved).toLocaleString()} without pruning`;
     }
-    tokenCount.textContent = displayTxt;
+    setTokenText(displayTxt);
     setTokenLimitExceededState(roughTokens > currentLimit);
 
     clearTimeout(tokenCalcTimeout);
@@ -81,7 +144,7 @@ export function updateTokenCount() {
                 tempMessages.push({ role: 'user', content: text });
             }
             if (tempMessages.length === 0) {
-                tokenCount.textContent = `0 / ${formatTokenLimit(currentLimit)} tokens`;
+                setTokenText(`0 / ${formatTokenLimit(currentLimit)} tokens`);
                 setTokenLimitExceededState(false);
                 return;
             }
@@ -105,7 +168,7 @@ export function updateTokenCount() {
                 if (totalSaved > 0) {
                     displayExact += ` \u2022 Would be ${(exactTokens + totalSaved).toLocaleString()} without pruning`;
                 }
-                tokenCount.textContent = displayExact;
+                setTokenText(displayExact);
                 setTokenLimitExceededState(exactTokens > latestLimit);
             }
         } catch (e) {

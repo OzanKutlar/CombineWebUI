@@ -10,6 +10,7 @@ import { saveHistory } from './sidebar.js';
 import { renderChat } from './chat.js';
 import { updateTokenCount } from './tokens.js';
 import { scrollToMessage } from './chatNav.js';
+import { getPendingSummary, requestPruneCommit } from './pruneCache.js';
 
 /**
  * Slide-in drawer for manual context pruning.
@@ -27,6 +28,33 @@ const view = {
     scopeIndex: null,
     selection: new Set()
 };
+
+// Pending (cache-deferred) prunes for the selected model, refreshed at the
+// start of every render so filters, badges and the summary agree.
+let pendingState = null;
+
+function refreshPendingState() {
+    try {
+        pendingState = getPendingSummary(getActiveConversation(), store.selectedModel, Date.now());
+    } catch (e) {
+        console.warn('Failed to compute pending prunes', e);
+        pendingState = null;
+    }
+}
+
+function isRowPending(row) {
+    if (!pendingState || pendingState.count === 0) return false;
+    return row.occurrences.some(o => {
+        const keys = pendingState.byIndex.get(o.messageIndex);
+        return Boolean(keys) && keys.has(row.key);
+    });
+}
+
+function pendingSummaryText() {
+    if (!pendingState || pendingState.count === 0) return '';
+    if (pendingState.commitRequested) return ' \u00b7 pending prunes apply on next send';
+    return ' \u00b7 ' + pendingState.tokens.toLocaleString() + ' tok pending (cache warm)';
+}
 
 function el(id) {
     return document.getElementById(id);
@@ -82,6 +110,7 @@ function matchesFilter(row) {
         case 'pruned': return row.prunedCount > 0;
         case 'partial': return row.isPartial;
         case 'duplicates': return row.count > 1;
+        case 'pending': return isRowPending(row);
         default: return true;
     }
 }
@@ -160,6 +189,9 @@ function createRow(row) {
         meta.appendChild(badge('\u00d7' + row.count, 'prune-badge-dup', 'Provided in ' + row.count + ' messages'));
     }
     if (row.isPartial) meta.appendChild(badge('PARTIAL', 'prune-badge-partial'));
+    if (isRowPending(row)) {
+        meta.appendChild(badge('PENDING', 'prune-badge-pending', 'Held back while the cache for the selected model is warm'));
+    }
 
     if (row.isMixed) {
         meta.appendChild(badge('MIXED', 'prune-badge-mixed', 'Pruned in some messages only'));
@@ -213,7 +245,8 @@ function updateSummary(rows) {
         + totals.files + ' files \u00b7 '
         + activeTokens.toLocaleString() + ' / ' + totals.tokens.toLocaleString() + ' tok active \u00b7 '
         + totals.saved.toLocaleString() + ' saved \u00b7 '
-        + view.selection.size + ' selected';
+        + view.selection.size + ' selected'
+        + pendingSummaryText();
 }
 
 function updateControls(rows) {
@@ -259,11 +292,21 @@ function updateControls(rows) {
         btn.classList.toggle('opacity-50', disabled);
         btn.classList.toggle('cursor-not-allowed', disabled);
     });
+
+    const applyBtn = el('prune-drawer-apply-pending');
+    if (applyBtn) {
+        const nothing = !pendingState || pendingState.count === 0 || pendingState.commitRequested;
+        applyBtn.disabled = nothing;
+        applyBtn.classList.toggle('opacity-50', nothing);
+        applyBtn.classList.toggle('cursor-not-allowed', nothing);
+    }
 }
 
 export function renderPruneDrawer() {
     const list = el('prune-drawer-list');
     if (!list) return;
+
+    refreshPendingState();
 
     const rows = visibleRows();
     const scrollTop = list.scrollTop;
@@ -327,6 +370,17 @@ function handleRestoreAll() {
     if (!active) return;
 
     commit(restoreAllManual(active.messages));
+}
+
+/** Breaks the cache on purpose: every pending prune goes out on the next send. */
+function handleApplyPending() {
+    if (blockedWhileProcessing()) return;
+
+    const active = getActiveConversation();
+    if (!active) return;
+
+    if (!requestPruneCommit(active)) return;
+    commit(1);
 }
 
 export function wirePruneDrawer() {
@@ -399,4 +453,7 @@ export function wirePruneDrawer() {
 
     const restoreAllBtn = el('prune-drawer-restore-all');
     if (restoreAllBtn) restoreAllBtn.addEventListener('click', handleRestoreAll);
+
+    const applyPendingBtn = el('prune-drawer-apply-pending');
+    if (applyPendingBtn) applyPendingBtn.addEventListener('click', handleApplyPending);
 }

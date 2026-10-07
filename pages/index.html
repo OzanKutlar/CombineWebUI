@@ -714,6 +714,7 @@
                 <button class="prune-chip" data-filter="pruned">Pruned</button>
                 <button class="prune-chip" data-filter="partial">Partial</button>
                 <button class="prune-chip" data-filter="duplicates">Duplicates</button>
+                <button class="prune-chip" data-filter="pending" title="Prunes held back while the selected model's cache is warm">Pending</button>
                 <button id="prune-drawer-clear-scope" class="prune-chip ml-auto hidden" title="Stop scoping to a single message">Show all messages</button>
             </div>
         </div>
@@ -730,6 +731,9 @@
                 </button>
                 <button id="prune-drawer-restore" class="flex-1 px-3 py-2 rounded bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-fgLight text-sm font-semibold border border-gb-bgLight3 transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2">
                     <i data-lucide="rotate-ccw" class="w-4 h-4 text-gb-greenAccent"></i> Restore selected
+                </button>
+                <button id="prune-drawer-apply-pending" class="px-3 py-2 rounded bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-yellowAccent border border-gb-bgLight3 transition-all active:scale-95 shrink-0" title="Apply pending prunes on the next send, even though the cache is warm">
+                    <i data-lucide="zap" class="w-4 h-4"></i>
                 </button>
                 <button id="prune-drawer-restore-all" class="px-3 py-2 rounded bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-fgDark hover:text-gb-fgLightest border border-gb-bgLight3 transition-all active:scale-95 shrink-0" title="Restore every manually pruned file in this thread">
                     <i data-lucide="list-restart" class="w-4 h-4"></i>

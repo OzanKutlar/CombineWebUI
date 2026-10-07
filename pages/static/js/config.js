@@ -59,3 +59,27 @@ export const AUTO_NAME_REASONING_EFFORT = 'none';
 export const AUTO_FOLDER_MAX_TOKENS = 4096;
 export const AUTO_FOLDER_MAX_CHATS = 200;
 export const AUTO_FOLDER_MAX_NEW_FOLDERS = 50;
+
+// Cache-aware pruning. "deferred" holds new prunes back while the target
+// model's prompt cache is warm; "immediate" applies them on the next send.
+export const PRUNE_POLICY_DEFERRED = 'deferred';
+export const PRUNE_POLICY_IMMEDIATE = 'immediate';
+
+// Anthropic's default cache lifetime. Endpoints override it in Settings.
+export const DEFAULT_CACHE_TTL_SECONDS = 300;
+export const MIN_CACHE_TTL_SECONDS = 30;
+export const MAX_CACHE_TTL_SECONDS = 3600;
+
+// Pending prunes are committed regardless of warmth once the context sent to a
+// model would exceed this share of its known token limit.
+export const CONTEXT_PRESSURE_RATIO = 0.8;
+
+// Countdown refresh for the footer while prunes are pending.
+export const PENDING_REFRESH_MS = 5000;
+
+// Upper bound on per-conversation cache scopes (one per model id).
+export const MAX_CACHE_SCOPES = 64;
+
+// Fired when the selected model gains or loses pending prunes, so prune cards
+// can repaint without re-rendering the chat on every countdown tick.
+export const PRUNE_PENDING_EVENT = 'ag:prune-pending-changed';

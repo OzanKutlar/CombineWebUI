@@ -134,7 +134,9 @@ def default_copilot_endpoint():
         "api_key": "",
         "logo": "",
         "models": [],
-        "stream": True
+        "stream": True,
+        "prune_policy": "deferred",
+        "cache_ttl_seconds": 300
     }
 
 

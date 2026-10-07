@@ -19,6 +19,7 @@ import {
     setInFlightVariant
 } from './messageTree.js';
 import { removeBranchByVid, withBranchChange } from './branchOps.js';
+import { buildOutgoingMessages, recordSend } from './pruneCache.js';
 
 // Upper bound on reader.read() calls for one streamed reply. Far above any
 // real response; it only stops a misbehaving server from spinning forever.
@@ -448,8 +449,16 @@ async function runCompletion(conv, index, vid, model) {
     setProcessingUI(true);
 
     try {
-        const replayHistory = buildReplayHistory(conv.messages.slice(0, index));
+        const prefix = conv.messages.slice(0, index);
+        const sentAt = Date.now();
+        // Prunes are resolved per model here, so a warm cache keeps its prefix.
+        const outgoing = buildOutgoingMessages(conv, prefix, model, sentAt);
+        // Recorded on the response so the token counter bills what was sent.
+        sink.patch({ sentPrunedIdx: outgoing.sentPrunedIdx });
+        const replayHistory = buildReplayHistory(outgoing.messages);
         const res = await requestCompletion(model, replayHistory, useStream, signal);
+        // The upstream has read the prompt by now, so its cache holds this form.
+        recordSend(conv, prefix, model, outgoing, sentAt);
         if (useStream) {
             await consumeStream(res, sink, inlineTags, chatContainer);
         } else {

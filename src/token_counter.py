@@ -19,8 +19,9 @@ from src.history import get_all_history, atomic_write_json
 # counting logic or the cached shape changes, otherwise stale numbers survive
 # an upgrade. Version 2 introduced per-day bucketing; version 3 switched to a
 # billed estimate that counts each message in the form it had at the time;
-# version 4 also counts responses on inactive branches of the message tree.
-TOKEN_CACHE_VERSION = 4
+# version 4 also counts responses on inactive branches of the message tree;
+# version 5 bills the prune forms each turn recorded as actually sent.
+TOKEN_CACHE_VERSION = 5
 TOKEN_CACHE_PATH = APP_DIR / "token_counter_cache.json"
 
 # tiktoken encodes in Rust and releases the GIL, so a small pool is a real
@@ -306,7 +307,8 @@ def _project_message(msg: dict, depth: int) -> dict:
         "originalContent": msg.get("originalContent"),
         "prunedContent": msg.get("prunedContent"),
         "reasoning": msg.get("reasoning"),
-        "pruneTargets": prune_targets
+        "pruneTargets": prune_targets,
+        "sentPrunedIdx": msg.get("sentPrunedIdx")
     }
 
     variants = msg.get("variants")
@@ -476,40 +478,77 @@ def _context_tokens(msg: dict, pruned_form: bool, encoder, preserve_models: froz
     return total
 
 
-def _prune_boundaries(messages: list) -> list:
-    """(assistant_index, user_index) pairs, sorted by when each prune landed.
+def _is_index(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
-    The assistant turn that emitted a PRUNE payload still saw the full context,
-    since that is what prompted it; only turns strictly after it saw the stub.
+
+def _payload_targets(msg: dict, idx: int) -> list:
+    """User indices a PRUNE payload on this assistant turn rewrote."""
+    info = msg.get("pruneInfo")
+    if not isinstance(info, dict):
+        return []
+    targets = info.get("targetIndices")
+    if not isinstance(targets, list):
+        legacy = info.get("userMsgIndex")
+        targets = [legacy] if isinstance(legacy, int) and legacy > -1 else []
+    return [t for t in targets if _is_index(t) and t < idx]
+
+
+def _recorded_targets(msg: dict, idx: int):
+    """User indices this turn was actually sent in pruned form, or None when
+    the turn predates send-time recording."""
+    raw = msg.get("sentPrunedIdx")
+    if not isinstance(raw, list):
+        return None
+    return [t for t in raw if _is_index(t) and t < idx]
+
+
+def _first_recorded_turn(messages: list):
+    for idx, msg in enumerate(messages):
+        if isinstance(msg, dict) and msg.get("role") == "assistant" and isinstance(msg.get("sentPrunedIdx"), list):
+            return idx
+    return None
+
+
+def _prune_boundaries(messages: list) -> list:
+    """(first_turn, user_index) pairs, sorted by first_turn: from assistant turn
+    `first_turn` onward, that user message counts in its pruned form.
+
+    Turns that recorded `sentPrunedIdx` say exactly what was sent, which is what
+    bills cache-deferred prunes correctly: the prune applies from the turn it
+    actually went out, not the turn that requested it. Older turns fall back to
+    the PRUNE payload, applied from the turn after it, since the turn that
+    emitted it still saw the full context. Payload prunes at or after the first
+    recorded turn are skipped, because the recorded turns already cover them.
+
     `pruneInfo.isPruned` is ignored on purpose, because re-adding files now
     cannot un-bill a request that already went out.
 
     Only the earliest prune per message is recorded. A message pruned in
-    stages is counted in its final stub form from the first prune onward, which
-    slightly understates the turns between stages.
+    stages, or restored after being sent pruned, is counted in its stub form
+    from the first prune onward, which slightly understates those turns.
     """
+    first_recorded = _first_recorded_turn(messages)
     pending = []
     seen = set()
 
     for idx, msg in enumerate(messages):
-        if not isinstance(msg, dict) or msg.get("role") != "assistant":
-            continue
-        info = msg.get("pruneInfo")
-        if not isinstance(info, dict):
+        if not isinstance(msg, dict) or msg.get("role") != "assistant" or msg.get("isError"):
             continue
 
-        targets = info.get("targetIndices")
-        if not isinstance(targets, list):
-            legacy = info.get("userMsgIndex")
-            targets = [legacy] if isinstance(legacy, int) and legacy > -1 else []
+        recorded = _recorded_targets(msg, idx)
+        if recorded is not None:
+            first_turn, targets = idx, recorded
+        elif first_recorded is None or idx < first_recorded:
+            first_turn, targets = idx + 1, _payload_targets(msg, idx)
+        else:
+            continue
 
         for target in targets:
-            if not isinstance(target, int) or target < 0 or target >= idx:
-                continue
             if target in seen:
                 continue
             seen.add(target)
-            pending.append((idx, target))
+            pending.append((first_turn, target))
 
     pending.sort(key=lambda pair: pair[0])
     return pending
@@ -668,9 +707,9 @@ def _walk_path(messages: list, fallback_ms: int, preserve_models: frozenset,
         is_error = bool(msg.get("isError"))
 
         if is_assistant and not is_error:
-            # Every prune that landed strictly before this turn now applies.
-            # `pending` is sorted by boundary, so the cursor only moves forward.
-            while cursor < len(pending) and pending[cursor][0] < idx:
+            # Every prune whose first turn is at or before this one now applies.
+            # `pending` is sorted by first turn, so the cursor only moves forward.
+            while cursor < len(pending) and pending[cursor][0] <= idx:
                 target = pending[cursor][1]
                 cursor += 1
                 if target in switched:

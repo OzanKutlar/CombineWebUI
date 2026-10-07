@@ -12,7 +12,8 @@ import { renderChat, handleSend } from './chat.js';
 import { wireChatNav } from './chatNav.js';
 import { closeActiveDropdown } from './messageActions.js';
 import { closePopupMenu } from './popupMenu.js';
-import { wirePruneDrawer, closePruneDrawer } from './pruneDrawer.js';
+import { wirePruneDrawer, closePruneDrawer, isPruneDrawerOpen, renderPruneDrawer } from './pruneDrawer.js';
+import { PRUNE_PENDING_EVENT } from './config.js';
 import { wireCodeBlocks } from './codeblock.js';
 import { wireSearchModal, closeSearchModal } from './search.js';
 import { wireTokenCounterModal, closeTokenCounterModal } from './tokenCounterModal.js';
@@ -28,6 +29,14 @@ function wireEvents() {
     wireCodeBlocks();
     wireSearchModal();
     wireTokenCounterModal();
+
+    // Prune cards and the drawer show cache-deferred state, which changes when
+    // a model's cache cools or a different model is selected.
+    window.addEventListener(PRUNE_PENDING_EVENT, () => {
+        if (store.isProcessing) return;
+        renderChat(true);
+        if (isPruneDrawerOpen()) renderPruneDrawer();
+    });
 
     // Any outside click or Escape dismisses an open message dropdown.
     document.addEventListener('click', closeActiveDropdown);

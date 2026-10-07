@@ -1,4 +1,6 @@
 import { fetchModels } from './models.js';
+import { PRUNE_POLICY_DEFERRED, PRUNE_POLICY_IMMEDIATE } from './config.js';
+import { clampCacheTtl } from './pruneCache.js';
 import { wireModalTabs } from './modalTabs.js';
 import { store, persistThinkingPrefs, persistTheme } from './storage.js';
 import { THEMES, applyTheme, normalizeTheme } from './theme.js';
@@ -78,6 +80,13 @@ async function resolveLogoPreview(val) {
     return s;
 }
 
+/** Coerces the cache-aware pruning fields on an endpoint to valid values. */
+function normalizeEndpointCacheFields(ep) {
+    if (!ep || typeof ep !== 'object') return;
+    ep.prune_policy = ep.prune_policy === PRUNE_POLICY_IMMEDIATE ? PRUNE_POLICY_IMMEDIATE : PRUNE_POLICY_DEFERRED;
+    ep.cache_ttl_seconds = clampCacheTtl(ep.cache_ttl_seconds);
+}
+
 function renderSettingsEndpoints() {
     const list = document.getElementById('endpoints-list');
     if (!list) return;
@@ -133,6 +142,20 @@ function renderSettingsEndpoints() {
                 <div id="models-list-${i}" class="flex flex-wrap gap-2 mt-3 empty:mt-0"></div>
                 <p class="text-[10.5px] text-gb-fgDark mt-2 font-medium">If empty, fetches all available models. If provided, forces these exact models to be available.</p>
             </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full mt-1">
+                <div class="min-w-0">
+                    <label class="text-xs text-gb-fgDark font-semibold uppercase">Prune Policy</label>
+                    <select class="w-full bg-gb-bg border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-2 py-1 mt-1" data-idx="${i}" data-field="prune_policy">
+                        <option value="deferred">Deferred (cache-aware)</option>
+                        <option value="immediate">Immediate</option>
+                    </select>
+                </div>
+                <div class="min-w-0">
+                    <label class="text-xs text-gb-fgDark font-semibold uppercase">Cache TTL (seconds)</label>
+                    <input type="number" min="30" max="3600" step="1" class="w-full bg-gb-bg border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-2 py-1 mt-1" data-idx="${i}" data-field="cache_ttl_seconds">
+                </div>
+            </div>
+            <p class="text-[10.5px] text-gb-fgDark font-medium">Deferred holds new prunes back while this model's prompt cache is warm, so the cached prefix survives. They apply once the cache goes cold, on a model switch, near the context limit, or when you press Apply now. Use Immediate for token quotas that ignore caching.</p>
         `;
         row.querySelector('[data-field="name"]').value = ep.name || '';
         row.querySelector('[data-field="url"]').value = ep.url || '';
@@ -140,6 +163,9 @@ function renderSettingsEndpoints() {
         row.querySelector('[data-field="logo"]').value = ep.logo || '';
         ep.stream = ep.stream !== false;
         row.querySelector('[data-field="stream"]').checked = ep.stream;
+        normalizeEndpointCacheFields(ep);
+        row.querySelector('[data-field="prune_policy"]').value = ep.prune_policy;
+        row.querySelector('[data-field="cache_ttl_seconds"]').value = String(ep.cache_ttl_seconds);
         list.appendChild(row);
 
         const inputEl = document.getElementById(`model-input-${i}`);
@@ -274,7 +300,24 @@ function renderSettingsEndpoints() {
             return;
         }
 
+        if (field === 'cache_ttl_seconds') {
+            // Clamped on save, so a half-typed value is never fought mid-edit.
+            inp.oninput = (e) => {
+                ep[field] = parseInt(e.target.value, 10);
+            };
+            return;
+        }
+
         inp.oninput = (e) => {
+            ep[field] = e.target.value;
+        };
+    });
+
+    list.querySelectorAll('select[data-field]').forEach(sel => {
+        const ep = currentSettings.custom_endpoints[Number(sel.getAttribute('data-idx'))];
+        const field = sel.getAttribute('data-field');
+        if (!ep || !field) return;
+        sel.onchange = (e) => {
             ep[field] = e.target.value;
         };
     });
@@ -554,7 +597,16 @@ export function closeSettingsModal() {
 
 export function addEndpoint() {
     if (!currentSettings.custom_endpoints) currentSettings.custom_endpoints = [];
-    currentSettings.custom_endpoints.push({ name: '', url: '', api_key: '', logo: '', models: [], stream: true });
+    currentSettings.custom_endpoints.push({
+        name: '',
+        url: '',
+        api_key: '',
+        logo: '',
+        models: [],
+        stream: true,
+        prune_policy: PRUNE_POLICY_DEFERRED,
+        cache_ttl_seconds: clampCacheTtl(null)
+    });
     renderSettingsEndpoints();
 }
 
@@ -580,6 +632,7 @@ export async function saveSettings() {
             return;
         }
     }
+    endpoints.forEach(normalizeEndpointCacheFields);
 
     // Reasoning budgets are configured in copilot-api's own settings.json.
     delete currentSettings.thinking_defaults;

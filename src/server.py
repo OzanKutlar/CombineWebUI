@@ -41,6 +41,13 @@ CHECK_TIMEOUT_MAX = 15.0
 PRICE_UNIT = 1000000
 MAX_PRICED_MODELS = 5000
 
+# Cache-aware pruning, configured per endpoint. Mirrors pages/static/js/config.js.
+PRUNE_POLICIES = ("deferred", "immediate")
+DEFAULT_PRUNE_POLICY = "deferred"
+DEFAULT_CACHE_TTL_SECONDS = 300
+CACHE_TTL_MIN_SECONDS = 30
+CACHE_TTL_MAX_SECONDS = 3600
+
 # Sections with dedicated endpoints. The settings modal posts back the copy it
 # loaded when it opened, which must never overwrite newer values.
 PROTECTED_SETTINGS_KEYS = ("model_pricing", "ui_preferences", COPILOT_SEED_FLAG)
@@ -146,6 +153,22 @@ def _match_provider(model_id, raw_id, providers):
     return None
 
 
+def _prune_policy(endpoint):
+    value = str(endpoint.get("prune_policy") or "").strip().lower()
+    return value if value in PRUNE_POLICIES else DEFAULT_PRUNE_POLICY
+
+
+def _cache_ttl(endpoint):
+    raw = endpoint.get("cache_ttl_seconds", DEFAULT_CACHE_TTL_SECONDS)
+    if raw is None or isinstance(raw, bool):
+        return DEFAULT_CACHE_TTL_SECONDS
+    try:
+        value = int(float(raw))
+    except (TypeError, ValueError, OverflowError):
+        return DEFAULT_CACHE_TTL_SECONDS
+    return min(max(value, CACHE_TTL_MIN_SECONDS), CACHE_TTL_MAX_SECONDS)
+
+
 def _public_model(model, providers):
     model_id = str(model.get("id"))
     raw_id = str(model.get("_raw_model_id") or model_id)
@@ -169,7 +192,9 @@ def _public_model(model, providers):
         "raw_id": raw_id,
         "is_custom": True,
         "is_metered": metered,
-        "stream_enabled": endpoint.get("stream", True) is not False
+        "stream_enabled": endpoint.get("stream", True) is not False,
+        "prune_policy": _prune_policy(endpoint),
+        "cache_ttl_seconds": _cache_ttl(endpoint)
     }
 
 
