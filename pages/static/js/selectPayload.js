@@ -1,4 +1,4 @@
-import { scanJsonObjects, safeJsonParse } from './execution.js';
+import { scanJsonObjects, safeJsonParse, hasXmlPayloadTag } from './execution.js';
 
 /**
  * SELECT (context request) payloads, in both the JSON and the XML variant.
@@ -13,7 +13,6 @@ const MAX_SELECT_ENTRIES = 500;
 const MAX_XML_PAYLOAD_SCANS = 50;
 const MAX_XML_TAG_MATCHES = 2000;
 const FENCE_WINDOW = 64;
-const PAYLOAD_OPEN_TAG = '<antigravity_payload>';
 const SELECT_MARKER = 'SELECT';
 
 function cleanString(value) {
@@ -181,9 +180,9 @@ function expandFence(text, start, end) {
 }
 
 function scanXmlSelectPayloads(text) {
-    if (text.indexOf(PAYLOAD_OPEN_TAG) === -1) return [];
+    if (!hasXmlPayloadTag(text)) return [];
     const results = [];
-    const re = /<antigravity_payload>[\s\S]*?<\/antigravity_payload>/gi;
+    const re = /<([a-zA-Z0-9_]+_payload)>[\s\S]*?<\/\1>/gi;
     let m;
     let scans = 0;
     while (scans < MAX_XML_PAYLOAD_SCANS && (m = re.exec(text)) !== null) {

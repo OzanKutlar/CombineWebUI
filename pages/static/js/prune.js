@@ -10,7 +10,7 @@ import {
     sanitizeReason
 } from './pruneManual.js';
 import { scanFileBlocksForText } from './promptParser.js';
-import { scanJsonObjects, safeJsonParse } from './execution.js';
+import { scanJsonObjects, safeJsonParse, hasXmlPayloadTag } from './execution.js';
 
 // Re-exported so existing importers keep working; the implementation now lives
 // in pruneManual.js alongside the rest of the prune core.
@@ -37,7 +37,7 @@ function parsePruneXmlFiles(xmlStr) {
 function scanPruneXmlPayloads(text) {
     const results = [];
     // Tempered so a match can never span from one payload into the next.
-    const fenceRe = /```(?:xml)?\s*(<antigravity_payload>(?:(?!<\/antigravity_payload>)[\s\S])*?<phase>PRUNE<\/phase>[\s\S]*?<\/antigravity_payload>)\s*```/gi;
+    const fenceRe = /```(?:xml)?\s*(<([a-zA-Z0-9_]+_payload)>(?:(?!<\/\2>)[\s\S])*?<phase>PRUNE<\/phase>[\s\S]*?<\/\2>)\s*```/gi;
     let m;
     let guard = 0;
     while ((m = fenceRe.exec(text)) !== null && guard < MAX_PRUNE_XML_CANDIDATES) {
@@ -52,7 +52,7 @@ function scanPruneXmlPayloads(text) {
     }
     if (results.length > 0) return results;
 
-    const tagRe = /<antigravity_payload>(?:(?!<\/antigravity_payload>)[\s\S])*?<phase>PRUNE<\/phase>[\s\S]*?<\/antigravity_payload>/gi;
+    const tagRe = /<([a-zA-Z0-9_]+_payload)>(?:(?!<\/\1>)[\s\S])*?<phase>PRUNE<\/phase>[\s\S]*?<\/\1>/gi;
     guard = 0;
     while ((m = tagRe.exec(text)) !== null && guard < MAX_PRUNE_XML_CANDIDATES) {
         results.push({
@@ -91,7 +91,7 @@ export function extractAllPrunePayloads(text) {
         }
     }
 
-    if (text.indexOf('<antigravity_payload>') !== -1 && text.indexOf('PRUNE') !== -1) {
+    if (hasXmlPayloadTag(text) && text.indexOf('PRUNE') !== -1) {
         const xmlBlocks = scanPruneXmlPayloads(text);
         for (let i = 0; i < xmlBlocks.length; i++) {
             payloads.push({

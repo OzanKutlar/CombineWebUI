@@ -1,5 +1,6 @@
 import { store, isPreserveEnabled } from './storage.js';
 import { countTokens } from './tokens.js';
+import { applyIdentity } from './identity.js';
 
 /**
  * Shared reasoning/thinking parsing. Both the live stream and historical
@@ -345,7 +346,7 @@ function neutralizeClosingTags(trace, tag) {
  * drop an assistant-side `reasoning_content`. Gated per originating model, so
  * you can preserve on one model and strip on another within the same thread.
  */
-export function buildReplayHistory(messages) {
+export function buildReplayHistory(messages, targetModelId) {
     if (!Array.isArray(messages)) return [];
     const tag = getInlineTags()[0] || REPLAY_FALLBACK_TAG;
 
@@ -353,7 +354,12 @@ export function buildReplayHistory(messages) {
         .filter(m => m && !m.isError && typeof m.role === 'string')
         .map(m => {
             const base = { role: m.role, content: m.content || '' };
-            if (m.role !== 'assistant') return base;
+            if (m.role !== 'assistant') {
+                // Resolved per target model, so sibling responses on one turn
+                // each receive an identity that matches them.
+                base.content = applyIdentity(base.content, targetModelId);
+                return base;
+            }
 
             const trace = typeof m.reasoning === 'string' ? m.reasoning.trim() : '';
             if (!trace) return base;

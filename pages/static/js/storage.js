@@ -16,6 +16,10 @@ import {
     STORAGE_KEY_PRESERVE_MODELS,
     STORAGE_KEY_FAVORITE_MODELS,
     MAX_FAVORITE_MODELS,
+    STORAGE_KEY_IDENTITY_PREFS,
+    IDENTITY_MODES,
+    DEFAULT_IDENTITY_PREFS,
+    MAX_IDENTITY_TEXT,
     STORAGE_KEY_THEME,
     DEFAULT_THEME,
     DEFAULT_THINKING_PREFS,
@@ -70,6 +74,25 @@ function loadFavoriteModels() {
     return sanitizeFavoriteModels(safeParse(localStorage.getItem(STORAGE_KEY_FAVORITE_MODELS), []));
 }
 
+/** Coerces identity prefs from any source into a valid object. Shared with sync.js. */
+export function sanitizeIdentityPrefs(raw) {
+    const prefs = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
+    const mode = (typeof prefs.mode === 'string' && IDENTITY_MODES.indexOf(prefs.mode) !== -1)
+        ? prefs.mode
+        : DEFAULT_IDENTITY_PREFS.mode;
+    const customText = typeof prefs.customText === 'string'
+        ? prefs.customText.slice(0, MAX_IDENTITY_TEXT)
+        : DEFAULT_IDENTITY_PREFS.customText;
+    const overrideHardcoded = typeof prefs.overrideHardcoded === 'boolean'
+        ? prefs.overrideHardcoded
+        : DEFAULT_IDENTITY_PREFS.overrideHardcoded;
+    return { mode, customText, overrideHardcoded };
+}
+
+function loadIdentityPrefs() {
+    return sanitizeIdentityPrefs(safeParse(localStorage.getItem(STORAGE_KEY_IDENTITY_PREFS), {}));
+}
+
 export const store = {
     conversations: [],
     folders: [],
@@ -82,6 +105,7 @@ export const store = {
     thinkingPrefs: loadThinkingPrefs(),
     preserveModels: loadPreserveModels(),
     favoriteModels: loadFavoriteModels(),
+    identityPrefs: loadIdentityPrefs(),
     allModels: [],
     allProviders: [],
     isProcessing: false,
@@ -110,6 +134,7 @@ export function saveUIPreferencesToBackend() {
             preserve_thinking_models: store.preserveModels,
             favorite_models: store.favoriteModels,
             thinking_prefs: store.thinkingPrefs,
+            identity_prefs: store.identityPrefs,
             theme: store.theme
         };
         fetch('/v1/ui_preferences', {
@@ -151,6 +176,11 @@ export async function syncUIPreferencesFromBackend() {
         if (prefs.thinking_prefs && typeof prefs.thinking_prefs === 'object') {
             store.thinkingPrefs = Object.assign({}, DEFAULT_THINKING_PREFS, prefs.thinking_prefs);
             localStorage.setItem(STORAGE_KEY_THINKING_PREFS, JSON.stringify(store.thinkingPrefs));
+        }
+        // Servers that predate identity prefs omit the key, so the local value is kept.
+        if (prefs.identity_prefs && typeof prefs.identity_prefs === 'object') {
+            store.identityPrefs = sanitizeIdentityPrefs(prefs.identity_prefs);
+            localStorage.setItem(STORAGE_KEY_IDENTITY_PREFS, JSON.stringify(store.identityPrefs));
         }
         // Only cached here. main.js re-applies it once this resolves, which
         // keeps theme.js out of this module's import graph and avoids a cycle.
@@ -220,6 +250,15 @@ export function persistTheme() {
 
 export function persistThinkingPrefs() {
     localStorage.setItem(STORAGE_KEY_THINKING_PREFS, JSON.stringify(store.thinkingPrefs));
+    saveUIPreferencesToBackend();
+}
+
+export function persistIdentityPrefs() {
+    try {
+        localStorage.setItem(STORAGE_KEY_IDENTITY_PREFS, JSON.stringify(store.identityPrefs));
+    } catch (e) {
+        console.warn('Could not cache identity preferences locally', e);
+    }
     saveUIPreferencesToBackend();
 }
 

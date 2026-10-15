@@ -1,11 +1,11 @@
-import { store, getActiveConversation, persistActiveConvId, sanitizeFavoriteModels } from './storage.js';
+import { store, getActiveConversation, persistActiveConvId, sanitizeFavoriteModels, sanitizeIdentityPrefs } from './storage.js';
 import { renderSidebar } from './sidebar.js';
 import { renderChat, updateHeaderTitle } from './chat.js';
 import { updateTokenCount } from './tokens.js';
 import { renderModelMatrix, updateSelectedModelUI } from './models.js';
 import { applyActiveTokenLimit } from './tokens.js';
 import { applyTheme, normalizeTheme } from './theme.js';
-import { STORAGE_KEY_THEME, STORAGE_KEY_FAVORITE_MODELS } from './config.js';
+import { STORAGE_KEY_THEME, STORAGE_KEY_FAVORITE_MODELS, STORAGE_KEY_IDENTITY_PREFS } from './config.js';
 
 let eventSource = null;
 let reconnectTimer = null;
@@ -131,6 +131,14 @@ function handleUIPreferencesUpdated(prefs) {
     }
     if (prefs.thinking_prefs && typeof prefs.thinking_prefs === 'object') {
         store.thinkingPrefs = Object.assign({}, store.thinkingPrefs, prefs.thinking_prefs);
+    }
+    if (prefs.identity_prefs && typeof prefs.identity_prefs === 'object') {
+        store.identityPrefs = sanitizeIdentityPrefs(prefs.identity_prefs);
+        try {
+            localStorage.setItem(STORAGE_KEY_IDENTITY_PREFS, JSON.stringify(store.identityPrefs));
+        } catch (e) {
+            console.warn('Could not cache synced identity preferences locally', e);
+        }
     }
     if (typeof prefs.theme === 'string' && prefs.theme) {
         const nextTheme = normalizeTheme(prefs.theme);

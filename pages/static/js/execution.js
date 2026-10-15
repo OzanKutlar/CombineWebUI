@@ -11,6 +11,16 @@ const MAX_JSON_CANDIDATES = 20;
 const MAX_XML_CANDIDATES = 20;
 const MAX_LOOP_GUARD = 2000;
 
+// Any root tag ending in _payload, since combineCopy names it after the
+// configured identity (antigravity_payload, claude_payload, agent_payload).
+const XML_PAYLOAD_OPEN_RE = /<[a-zA-Z0-9_]+_payload>/;
+
+/** Cheap pre-check before running the heavier XML payload scanners. */
+export function hasXmlPayloadTag(text) {
+    if (typeof text !== 'string' || text.indexOf('_payload>') === -1) return false;
+    return XML_PAYLOAD_OPEN_RE.test(text);
+}
+
 /**
  * Bounded state-machine scan for top-level {...} JSON objects in `text`,
  * respecting string quoting so braces inside string values never throw the
@@ -70,7 +80,7 @@ export function scanJsonObjects(text) {
 
 function scanXmlPayloads(text) {
     const results = [];
-    const fenceRe = /```(?:xml)?\s*(<antigravity_payload>[\s\S]*?<\/antigravity_payload>)\s*```/gi;
+    const fenceRe = /```(?:xml)?\s*(<([a-zA-Z0-9_]+_payload)>[\s\S]*?<\/\2>)\s*```/gi;
     let m;
     let guard = 0;
     while ((m = fenceRe.exec(text)) !== null && guard < MAX_XML_CANDIDATES) {
@@ -84,7 +94,7 @@ function scanXmlPayloads(text) {
     }
     if (results.length > 0) return results;
 
-    const tagRe = /<antigravity_payload>[\s\S]*?<\/antigravity_payload>/gi;
+    const tagRe = /<([a-zA-Z0-9_]+_payload)>[\s\S]*?<\/\1>/gi;
     guard = 0;
     while ((m = tagRe.exec(text)) !== null && guard < MAX_XML_CANDIDATES) {
         results.push({
@@ -256,7 +266,7 @@ export function extractAllExecutionPayloads(text) {
         }
     }
 
-    if (text.indexOf('<antigravity_payload>') !== -1) {
+    if (hasXmlPayloadTag(text)) {
         const xmlBlocks = scanXmlPayloads(text);
         for (let i = 0; i < xmlBlocks.length; i++) {
             const data = parseExecutionXml(xmlBlocks[i].raw);

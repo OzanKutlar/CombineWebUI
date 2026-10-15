@@ -2,7 +2,7 @@ import { fetchModels } from './models.js';
 import { PRUNE_POLICY_DEFERRED, PRUNE_POLICY_IMMEDIATE } from './config.js';
 import { clampCacheTtl } from './pruneCache.js';
 import { wireModalTabs } from './modalTabs.js';
-import { store, persistThinkingPrefs, persistTheme } from './storage.js';
+import { store, persistThinkingPrefs, persistTheme, persistIdentityPrefs, sanitizeIdentityPrefs } from './storage.js';
 import { THEMES, applyTheme, normalizeTheme } from './theme.js';
 import { renderChat } from './chat.js';
 import {
@@ -533,6 +533,44 @@ function renderThemePicker() {
     });
 }
 
+function syncIdentityCustomVisibility() {
+    const modeEl = document.getElementById('setting-identity-mode');
+    const wrap = document.getElementById('setting-identity-custom-wrap');
+    if (!modeEl || !wrap) return;
+    wrap.classList.toggle('hidden', modeEl.value !== 'custom');
+}
+
+function populateIdentityControls() {
+    const modeEl = document.getElementById('setting-identity-mode');
+    const customEl = document.getElementById('setting-identity-custom');
+    const overrideEl = document.getElementById('setting-identity-override');
+    if (!modeEl || !customEl || !overrideEl) return;
+
+    const prefs = sanitizeIdentityPrefs(store.identityPrefs);
+    modeEl.value = prefs.mode;
+    customEl.value = prefs.customText;
+    overrideEl.checked = prefs.overrideHardcoded;
+
+    if (!modeEl._wired) {
+        modeEl._wired = true;
+        modeEl.addEventListener('change', syncIdentityCustomVisibility);
+    }
+    syncIdentityCustomVisibility();
+}
+
+/** Reads the identity controls; falls back to the stored prefs if they are missing. */
+function readIdentityControls() {
+    const modeEl = document.getElementById('setting-identity-mode');
+    const customEl = document.getElementById('setting-identity-custom');
+    const overrideEl = document.getElementById('setting-identity-override');
+    if (!modeEl || !customEl || !overrideEl) return sanitizeIdentityPrefs(store.identityPrefs);
+    return sanitizeIdentityPrefs({
+        mode: modeEl.value,
+        customText: customEl.value,
+        overrideHardcoded: overrideEl.checked
+    });
+}
+
 export async function openSettingsModal() {
     const modal = document.getElementById('settings-modal');
     const box = document.getElementById('settings-modal-box');
@@ -549,6 +587,7 @@ export async function openSettingsModal() {
     themeAtOpen = normalizeTheme(store.theme);
     pendingTheme = themeAtOpen;
     renderThemePicker();
+    populateIdentityControls();
 
     const addGroupBtn = document.getElementById('add-provider-group-btn');
     if (addGroupBtn && !addGroupBtn._wired) {
@@ -653,6 +692,9 @@ export async function saveSettings() {
         inlineTags: tags
     };
     persistThinkingPrefs();
+
+    store.identityPrefs = readIdentityControls();
+    persistIdentityPrefs();
 
     if (pendingTheme && pendingTheme !== store.theme) {
         store.theme = pendingTheme;

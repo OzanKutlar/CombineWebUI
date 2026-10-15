@@ -115,6 +115,12 @@ def _default_ui_preferences():
         "preserve_thinking_models": {},
         # One of "dark", "hard" or "light"; validated client-side.
         "theme": "dark",
+        # Agent identity rewriting for combineCopy prompts; validated client-side.
+        "identity_prefs": {
+            "mode": "auto",
+            "customText": "",
+            "overrideHardcoded": True
+        },
         "thinking_prefs": {
             "show": True,
             "autoExpand": False,

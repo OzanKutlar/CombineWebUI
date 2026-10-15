@@ -265,6 +265,32 @@
                                 </div>
 
                                 <div class="border-t border-gb-bgLight2 pt-5 flex flex-col gap-4">
+                                    <h4 class="text-sm font-bold text-gb-fgLightest">Agent Identity</h4>
+                                    <div>
+                                        <label class="text-xs text-gb-fgDark font-semibold uppercase" for="setting-identity-mode">Identity Sent To Models</label>
+                                        <select id="setting-identity-mode" class="w-full bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-3 py-2 mt-1">
+                                            <option value="auto">Auto (match the target model)</option>
+                                            <option value="neutral">Neutral (no vendor or model name)</option>
+                                            <option value="claude">Claude (Anthropic)</option>
+                                            <option value="gemini">Gemini (Google)</option>
+                                            <option value="chatgpt">ChatGPT (OpenAI)</option>
+                                            <option value="antigravity">Antigravity (Google DeepMind)</option>
+                                            <option value="custom">Custom</option>
+                                            <option value="off">Off (send prompts unchanged)</option>
+                                        </select>
+                                    </div>
+                                    <div id="setting-identity-custom-wrap" class="hidden">
+                                        <label class="text-xs text-gb-fgDark font-semibold uppercase" for="setting-identity-custom">Custom Identity</label>
+                                        <input type="text" id="setting-identity-custom" maxlength="500" class="w-full bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-3 py-2 mt-1" placeholder="DeepSeek, or a full sentence starting with You are">
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <input type="checkbox" id="setting-identity-override" class="w-4 h-4 rounded border-gb-bgLight2 bg-gb-bgDarkest text-gb-blueAccent focus:ring-gb-blueAccent cursor-pointer">
+                                        <label class="text-sm text-gb-fgLight cursor-pointer select-none" for="setting-identity-override">Also replace hardcoded &lt;identity&gt; lines, such as You are Antigravity</label>
+                                    </div>
+                                    <p class="text-xs text-gb-fgDark leading-relaxed">Applied to each outgoing request, so every response tab gets its own identity and saved chats are never rewritten. The {{IDENTITY}} placeholder from combineCopy is filled in unless this is Off. Only the system instructions are touched: file context containing an identity block or the placeholder is sent exactly as written.</p>
+                                </div>
+
+                                <div class="border-t border-gb-bgLight2 pt-5 flex flex-col gap-4">
                                     <h4 class="text-sm font-bold text-gb-fgLightest">Thinking Traces</h4>
                                     <div class="flex items-center gap-2">
                                         <input type="checkbox" id="setting-thinking-show" class="w-4 h-4 rounded border-gb-bgLight2 bg-gb-bgDarkest text-gb-blueAccent focus:ring-gb-blueAccent cursor-pointer">

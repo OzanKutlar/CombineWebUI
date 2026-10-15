@@ -9,7 +9,8 @@ A self-hosted chat interface for any **OpenAI-compatible API**. CombineWebUI has
 - **Thinking traces.** Reasoning fields and inline `<think>` blocks are captured and shown in a collapsible panel. You can choose per model whether to replay them into context.
 - **Context pruning.** A drawer for removing large file blocks from earlier messages. AI-requested `PRUNE` payloads are honoured too.
 - **Cache-aware pruning.** New prunes are held back while the target model's prompt cache is warm, then applied once it cools, on a model switch, near the context limit, or on demand. The policy and cache TTL are set per endpoint.
-- **Payload cards.** `EXECUTION`, `PRUNE` and `SELECT` payloads from combineCopy-style prompts render as compact cards with diff stats.
+- **Payload cards.** `EXECUTION`, `PRUNE` and `SELECT` payloads from combineCopy-style prompts render as compact cards with diff stats. XML payloads with any `<*_payload>` root tag are recognised.
+- **Agent identity.** combineCopy prompts are re-targeted on each request. The `{{IDENTITY}}` placeholder, and optionally a hardcoded `<identity>` line, is filled to match the target model, a preset or your own text. The setting is under Settings, Display. Only the system instructions are rewritten, and saved chats are never changed.
 - **Token counter.** Per-model and per-provider totals, trend charts and cost estimates from your own price table.
 - **Auto Name and Auto Folder.** Uses any configured model, and warns before using a metered one.
 - **Themes and live sync.** Gruvbox dark, hard and light themes. Open tabs stay in sync over server-sent events.

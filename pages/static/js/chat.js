@@ -455,7 +455,7 @@ async function runCompletion(conv, index, vid, model) {
         const outgoing = buildOutgoingMessages(conv, prefix, model, sentAt);
         // Recorded on the response so the token counter bills what was sent.
         sink.patch({ sentPrunedIdx: outgoing.sentPrunedIdx });
-        const replayHistory = buildReplayHistory(outgoing.messages);
+        const replayHistory = buildReplayHistory(outgoing.messages, model);
         const res = await requestCompletion(model, replayHistory, useStream, signal);
         // The upstream has read the prompt by now, so its cache holds this form.
         recordSend(conv, prefix, model, outgoing, sentAt);

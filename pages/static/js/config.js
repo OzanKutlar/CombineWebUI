@@ -7,6 +7,18 @@ export const STORAGE_KEY_SIDEBAR_VIEW_MODE = 'copilot_sidebar_view_mode_v1';
 export const STORAGE_KEY_THINKING_PREFS = 'copilot_thinking_prefs_v1';
 export const STORAGE_KEY_PRESERVE_MODELS = 'copilot_preserve_thinking_models_v1';
 export const STORAGE_KEY_FAVORITE_MODELS = 'copilot_favorite_models_v1';
+export const STORAGE_KEY_IDENTITY_PREFS = 'copilot_identity_prefs_v1';
+
+// Agent identity rewriting for combineCopy prompts. "auto" matches the target
+// model and "off" sends prompts untouched. Keep in sync with the Settings select.
+export const IDENTITY_MODES = Object.freeze(['auto', 'neutral', 'claude', 'gemini', 'chatgpt', 'antigravity', 'custom', 'off']);
+export const IDENTITY_PLACEHOLDER = '{{IDENTITY}}';
+export const MAX_IDENTITY_TEXT = 500;
+export const DEFAULT_IDENTITY_PREFS = Object.freeze({
+    mode: 'auto',
+    customText: '',
+    overrideHardcoded: true
+});
 
 // Header favorites bar. Favorites whose endpoint is offline or that are hidden
 // still count toward the cap, because they are kept so they can reappear.

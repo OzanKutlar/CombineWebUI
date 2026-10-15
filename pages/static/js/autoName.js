@@ -27,7 +27,7 @@ function executionJsonRegex() {
 }
 
 function payloadTagRegex() {
-    return /<antigravity_payload>[\s\S]*?<\/antigravity_payload>/ig;
+    return /<([a-zA-Z0-9_]+_payload)>[\s\S]*?<\/\1>/ig;
 }
 
 function isSelectable(model) {
