@@ -4,7 +4,6 @@ import asyncio
 import json
 import sys
 
-import uvicorn
 from rich.panel import Panel
 from rich.table import Table
 
@@ -70,6 +69,7 @@ def cmd_start(args):
     ensure_paths()
     asyncio.run(_warm_model_cache())
 
+    import uvicorn
     from src.server import app
     shown_host = "localhost" if args.host in ("0.0.0.0", "::") else args.host
     console.print(f"\n[bold green]CombineWebUI[/bold green] is running at http://{shown_host}:{args.port}/\n")
@@ -181,6 +181,14 @@ def cmd_token_counter(args):
     console.print(_model_table(stats, currency))
 
 
+def cmd_cli(args):
+    _configure_logging(args.verbose)
+    ensure_paths()
+    # Imported here so the web server stack is never loaded in CLI mode.
+    from src.cli.repl import run_cli
+    run_cli(chat_id=args.chat, label=args.label)
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="CombineWebUI: a chat UI for OpenAI-compatible endpoints")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -195,12 +203,18 @@ def build_parser():
     token_p.add_argument("--json", action="store_true", help="Output stats as JSON")
     token_p.add_argument("--refresh", action="store_true", help="Ignore the cache and re-tokenize every conversation")
     token_p.add_argument("--clear-cache", action="store_true", help="Delete the token counter cache file and exit")
+
+    cli_p = subparsers.add_parser("cli", help="Clipboard chat console: no server and no API calls")
+    cli_p.add_argument("-c", "--chat", help="Open this chat id instead of showing the picker")
+    cli_p.add_argument("-l", "--label", help="Web chat label such as Claude (web); selects its cache policy and identity")
+    cli_p.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
     return parser
 
 
 COMMANDS = {
     "start": cmd_start,
-    "token-counter": cmd_token_counter
+    "token-counter": cmd_token_counter,
+    "cli": cmd_cli
 }
 
 

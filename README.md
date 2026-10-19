@@ -42,6 +42,57 @@ Copilot models carry a premium `multiplier`, so CombineWebUI marks them as **met
 | --- | --- |
 | `python main.py start [--host H] [--port P] [-v] [--proxy-env]` | Start the server (default `127.0.0.1:4142`) |
 | `python main.py token-counter [--json] [--refresh] [--clear-cache]` | Tally tokens across all saved chats |
+| `python main.py cli [-c CHAT] [-l LABEL] [-v]` | Clipboard chat console with no server and no API calls. See [CLI mode](#cli-mode-no-server) |
+
+## CLI mode (no server)
+
+For machines where you may not host a server but can use an approved AI web chat. `python main.py cli` never opens a socket and never calls an API. The conversation travels through your clipboard, as in Human Hands, and is stored in the same chat files the web UI uses, so a thread can move between the two.
+
+```sh
+pip install -r requirements-cli.txt
+python main.py cli -l "Claude (web)"
+```
+
+1. Pick a chat (recent first, **＋ New chat…** last), or pass `-c <chat id>`.
+2. Add a prompt:
+   - Copy a combineCopy payload and run `paste`. It is staged: `drop 2 5` leaves files out, `edit` opens the request in micro, and `send` adds it.
+   - Run `edit` to write a prompt in micro in this terminal. Save and quit, and the text becomes the prompt.
+   - Run `say` to type one, or `paste` any other text.
+3. The prompt is now on your clipboard. Paste it into the web chat, copy the model's reply, and run `reply`. The reply is rendered as markdown, PRUNE and EXECUTION payloads appear as cards, and PRUNE payloads are applied.
+4. Repeat. Copies hold **new messages only** by default. `swap` switches the clipboard to the full conversation for a fresh web chat.
+
+### Cache-aware pruning in a web chat
+
+The web chat plays the role of the provider's prompt cache. Each label has its own `policy`, `ttl` and `limit`, stored in `~/.local/share/combine-webui/cli.json`. The defaults are deferred, 300 seconds and 200k tokens.
+
+- While you keep pasting new messages into the same web chat, a prune (yours or the AI's) cannot remove anything that chat already has, so it is **held**.
+- Held prunes become **due** once the TTL has passed since the last reply, or once the web chat reaches 85% of `limit`. `copy` then warns and estimates what a fresh chat would save.
+- `swap` or `copy full` starts a fresh web chat with every prune applied. `flush`, or `policy immediate`, makes the next copy full automatically.
+- A send is recorded when you run `reply`, from what was copied, so swapping back and forth before you paste costs nothing.
+
+The state uses the web UI's own `cacheWarmth` and `sentPrunes` fields, with the label as the scope.
+
+### CLI commands
+
+Type `help` in the console for the full list. The main ones:
+
+| Command | What it does |
+| --- | --- |
+| `paste`, `say`, `edit` | Add a prompt from the clipboard, typed, or written in micro |
+| `drop`, `undrop`, `send`, `discard` | Edit and commit a staged combineCopy payload |
+| `copy [new\|full]`, `swap` | Copy the conversation, or switch between new and full |
+| `reply`, `undo`, `edit last` | Record the reply, take back the last message, or rewrite an unanswered prompt |
+| `files`, `prune`, `restore`, `aiprune` | List files and prune or restore them by number or path |
+| `cache`, `flush`, `policy`, `ttl`, `limit`, `label` | Cache state and per-label settings |
+| `chat`, `chats`, `show`, `history`, `status` | Navigation and inspection |
+
+### CLI notes
+
+- **Editor.** micro is found on PATH or in its usual Windows install folders. Set `COMBINE_CLI_EDITOR` (for example `nano`) to use another editor; `VISUAL` and `EDITOR` are the fallback.
+- **Tokens.** `tiktoken` downloads its encoding on first use. On an offline machine, set `COMBINE_CLI_TOKENIZER=heuristic` or leave tiktoken uninstalled, and a characters / 4 estimate is used.
+- **Identity.** The web UI's identity setting applies. In auto mode the label decides: `Claude (web)` fills in Claude, while a label naming no model family fills `{{IDENTITY}}` neutrally and leaves a hardcoded `<identity>` line alone.
+- **Linux clipboard.** pyperclip needs `xclip`, `xsel` or `wl-clipboard`.
+- **Running next to the web UI.** CLI edits are not pushed to open browser tabs, so reload the chat there. Avoid editing the same chat in both at once.
 
 ## Configuration
 

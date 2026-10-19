@@ -1,0 +1,8 @@
+# CLI mode only (python main.py cli): no server and no HTTP client.
+rich>=13.0.0
+pyperclip>=1.8.2
+prompt_toolkit>=3.0.0
+
+# Optional. Without it, token counts use a characters / 4 estimate.
+# It downloads its encoding on first use; offline, set COMBINE_CLI_TOKENIZER=heuristic.
+tiktoken>=0.5.0
