@@ -17,6 +17,8 @@ import { PRUNE_PENDING_EVENT } from './config.js';
 import { wireCodeBlocks } from './codeblock.js';
 import { wireSearchModal, closeSearchModal } from './search.js';
 import { wireTokenCounterModal, closeTokenCounterModal } from './tokenCounterModal.js';
+import { wireComposer, closePasteContextModal } from './composerView.js';
+import { hasStaged } from './composer.js';
 
 marked.setOptions({ breaks: true, gfm: true });
 
@@ -29,6 +31,7 @@ function wireEvents() {
     wireCodeBlocks();
     wireSearchModal();
     wireTokenCounterModal();
+    wireComposer();
 
     // Prune cards and the drawer show cache-deferred state, which changes when
     // a model's cache cools or a different model is selected.
@@ -48,6 +51,7 @@ function wireEvents() {
         closePruneDrawer();
         closeSearchModal();
         closeTokenCounterModal();
+        closePasteContextModal();
         if (!isSaveProgressActive()) {
             closeSaveProgressModal();
         }
@@ -75,7 +79,8 @@ function wireEvents() {
 
     continueBtn.addEventListener('click', () => {
         // Only inject the boilerplate when the user has not typed their own nudge.
-        if (!promptInput.value.trim()) {
+        // A staged payload is a real prompt even when the request box is empty.
+        if (!promptInput.value.trim() && !hasStaged()) {
             promptInput.value = 'Please continue exactly where you left off, preserving any open code blocks or formatting.';
         }
         handleSend();

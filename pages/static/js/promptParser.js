@@ -195,8 +195,53 @@ function stripRanges(text, ranges) {
     return result;
 }
 
+/** Narrows [start, end) to its first and last non-whitespace characters. */
+function trimRange(text, start, end) {
+    let s = start;
+    let e = end;
+    while (s < e && /\s/.test(text[s])) s++;
+    while (e > s && /\s/.test(text[e - 1])) e--;
+    return { start: s, end: e };
+}
+
+/** End of [start, end), pulled back to the first file block that begins inside it. */
+function clipBeforeFiles(start, end, files) {
+    let clipped = end;
+    for (let i = 0; i < files.length; i++) {
+        const fileStart = files[i].start;
+        if (fileStart >= start && fileStart < clipped) clipped = fileStart;
+    }
+    return clipped;
+}
+
+/**
+ * The prose segments of a header-less preamble, between its file blocks.
+ * The first one is primary: an edited request is written there and the rest
+ * are emptied, mirroring how userRequest joins them.
+ */
+function preambleSpans(raw, limit, files) {
+    const ranges = files
+        .filter(f => f.start < limit)
+        .map(f => ({ start: f.start, end: Math.min(f.end, limit) }))
+        .sort((a, b) => a.start - b.start);
+
+    const spans = [];
+    let cursor = 0;
+    for (let i = 0; i <= ranges.length; i++) {
+        const gapEnd = i < ranges.length ? ranges[i].start : limit;
+        if (gapEnd > cursor) {
+            const span = trimRange(raw, cursor, gapEnd);
+            if (span.end > span.start) {
+                spans.push({ start: span.start, end: span.end, kind: 'preamble', primary: spans.length === 0 });
+            }
+        }
+        if (i < ranges.length) cursor = Math.max(cursor, ranges[i].end);
+    }
+    return spans;
+}
+
 function emptyResult() {
-    return { isStructured: false, userRequest: null, sections: [], files: [] };
+    return { isStructured: false, userRequest: null, sections: [], files: [], requestSpans: [] };
 }
 
 /**
@@ -230,6 +275,9 @@ export function parseCombineCopyPrompt(raw) {
     }
 
     let userRequest = null;
+    // Character ranges holding the request, so a composer can swap it out
+    // while leaving every other byte of the payload untouched.
+    const requestSpans = [];
 
     // Everything before the first recognised header (or the whole text, when
     // there are no headers at all) used to be discarded outright. Emitters
@@ -242,7 +290,10 @@ export function parseCombineCopyPrompt(raw) {
             .filter(f => f.start < firstMarkOffset)
             .map(f => ({ start: f.start, end: Math.min(f.end, firstMarkOffset) }));
         const preambleText = stripRanges(raw.slice(0, firstMarkOffset), preambleRanges).trim();
-        if (preambleText) userRequest = preambleText;
+        if (preambleText) {
+            userRequest = preambleText;
+            preambleSpans(raw, firstMarkOffset, files).forEach(span => requestSpans.push(span));
+        }
     }
 
     const sections = [];
@@ -253,10 +304,18 @@ export function parseCombineCopyPrompt(raw) {
         const end = (mIdx + 1 < marks.length) ? marks[mIdx + 1].line : lines.length;
         const body = lines.slice(start, end).join('\n').trim();
         const def = marks[mIdx].def;
+        const headerStart = lineOffsets[marks[mIdx].line];
+        const bodyStart = start < lineOffsets.length ? lineOffsets[start] : raw.length;
+        const bodyEnd = (mIdx + 1 < marks.length) ? lineOffsets[marks[mIdx + 1].line] : raw.length;
 
         // The reminder duplicates the request verbatim; first non-empty wins.
+        // Clipped at the first file block, so FILE blocks placed directly under
+        // the header are not mistaken for request text.
         if (def.id === 'user_request' || def.id === 'user_reminder') {
-            if (userRequest === null && body) userRequest = body;
+            const span = trimRange(raw, bodyStart, clipBeforeFiles(bodyStart, bodyEnd, files));
+            const requestText = raw.slice(span.start, span.end);
+            requestSpans.push({ start: span.start, end: span.end, kind: 'header', empty: span.end === span.start });
+            if (userRequest === null && requestText) userRequest = requestText;
             continue;
         }
 
@@ -270,12 +329,16 @@ export function parseCombineCopyPrompt(raw) {
             id: def.id + '_' + mIdx,
             title: def.title,
             icon: def.icon,
-            body
+            body,
+            // Header line through the end of the body, stopping short of any
+            // file block so removing a section never removes a file.
+            start: headerStart,
+            end: clipBeforeFiles(headerStart, bodyEnd, files)
         });
     }
 
     const isStructured = files.length > 0 || userRequest !== null || sawFileContext || sections.length > 0;
     if (!isStructured) return emptyResult();
 
-    return { isStructured: true, userRequest, sections, files };
+    return { isStructured: true, userRequest, sections, files, requestSpans };
 }

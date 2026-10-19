@@ -1506,3 +1506,311 @@ body {
         transform: none;
     }
 }
+
+/* Structured paste composer.
+
+   The chip bar is hidden through its own class rather than Tailwind's
+   `hidden`, because the CDN build's cascade order against this sheet is not
+   guaranteed and display: flex here could win. */
+.composer-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border: 1px dashed rgb(var(--gb-bg-light-3));
+    border-radius: 8px;
+    background: rgb(var(--gb-bg-darkest));
+}
+
+.composer-bar.composer-bar-empty {
+    display: none;
+}
+
+.composer-bar-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding-right: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgb(var(--gb-fg-dark));
+}
+
+.composer-bar-label svg,
+.composer-chip svg,
+.composer-bar-action svg,
+.ctx-action-btn svg {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+}
+
+.composer-bar-spacer {
+    flex: 1;
+}
+
+.composer-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 280px;
+    padding: 3px 10px;
+    border-radius: 9999px;
+    border: 1px solid rgb(var(--gb-bg-light-3));
+    background: rgb(var(--gb-bg));
+    color: rgb(var(--gb-fg-light));
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.composer-chip svg {
+    color: rgb(var(--gb-aqua-accent));
+}
+
+.composer-chip:hover {
+    background: rgb(var(--gb-bg-light-1));
+    border-color: rgb(var(--gb-blue-accent));
+    color: rgb(var(--gb-fg-lightest));
+}
+
+.composer-chip:active {
+    transform: scale(0.97);
+}
+
+.composer-chip:focus-visible,
+.composer-bar-action:focus-visible,
+.ctx-action-btn:focus-visible {
+    outline: 2px solid rgb(var(--gb-blue-accent));
+    outline-offset: 1px;
+}
+
+.composer-chip-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.composer-chip-tokens {
+    flex-shrink: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 10px;
+    font-weight: 600;
+    color: rgb(var(--gb-fg-dark));
+}
+
+.composer-chip-removed {
+    opacity: 0.5;
+    border-style: dashed;
+}
+
+.composer-chip-removed .composer-chip-label {
+    text-decoration: line-through;
+}
+
+.composer-bar-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: rgb(var(--gb-fg-dark));
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.composer-bar-action:hover {
+    background: rgb(var(--gb-bg-light-1));
+    color: rgb(var(--gb-fg-lightest));
+}
+
+.composer-bar-action-danger:hover {
+    color: rgb(var(--gb-red-accent));
+}
+
+/* Pasted Context modal */
+.ctx-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid rgb(var(--gb-bg-light-2));
+    flex-shrink: 0;
+}
+
+.ctx-panel-sub {
+    margin-top: 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    color: rgb(var(--gb-fg-dark));
+}
+
+.ctx-panel-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    min-height: 0;
+    padding: 20px 24px;
+    overflow-y: auto;
+}
+
+.ctx-tab-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ctx-tab-removed {
+    opacity: 0.55;
+}
+
+.ctx-tab-removed .ctx-tab-label {
+    text-decoration: line-through;
+}
+
+.ctx-section-removed .ctx-section-pre {
+    opacity: 0.45;
+}
+
+.ctx-file-row {
+    flex-shrink: 0;
+    border: 1px solid rgb(var(--gb-bg-light-1));
+    border-radius: 8px;
+    background: rgb(var(--gb-bg-darkest));
+    overflow: hidden;
+    transition: border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.ctx-file-row:hover {
+    border-color: rgb(var(--gb-bg-light-2));
+}
+
+.ctx-file-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.ctx-file-head:hover {
+    background: rgb(var(--gb-bg));
+}
+
+.ctx-file-chevron {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    color: rgb(var(--gb-fg-dark));
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ctx-file-open .ctx-file-chevron {
+    transform: rotate(90deg);
+}
+
+.ctx-file-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    color: rgb(var(--gb-aqua-accent));
+}
+
+.ctx-file-path {
+    flex: 1;
+    min-width: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    color: rgb(var(--gb-fg-light));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ctx-file-removed {
+    opacity: 0.6;
+}
+
+.ctx-file-removed .ctx-file-path {
+    text-decoration: line-through;
+    color: rgb(var(--gb-fg-dark));
+}
+
+.ctx-file-body {
+    max-height: 50vh;
+    overflow: auto;
+    border-top: 1px solid rgb(var(--gb-bg-light-1));
+    background: rgb(var(--gb-code-bg));
+}
+
+.ctx-pre {
+    border: none;
+    border-radius: 0;
+    background: transparent;
+}
+
+.ctx-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+    padding: 4px 9px;
+    border-radius: 6px;
+    border: 1px solid rgb(var(--gb-bg-light-2));
+    background: rgb(var(--gb-bg));
+    color: rgb(var(--gb-fg-dark));
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.ctx-action-btn:hover {
+    background: rgb(var(--gb-bg-light-1));
+    color: rgb(var(--gb-fg-lightest));
+}
+
+.ctx-action-btn:active {
+    transform: scale(0.95);
+}
+
+.ctx-action-danger:hover {
+    color: rgb(var(--gb-red-accent));
+    border-color: rgb(var(--gb-red-accent) / 0.45);
+}
+
+.ctx-action-restore {
+    color: rgb(var(--gb-green-accent));
+}
+
+.ctx-action-restore:hover {
+    color: rgb(var(--gb-green-accent));
+    border-color: rgb(var(--gb-green-accent) / 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .composer-chip,
+    .composer-bar-action,
+    .ctx-file-row,
+    .ctx-file-head,
+    .ctx-file-chevron,
+    .ctx-action-btn {
+        transition: none !important;
+    }
+}

@@ -1,6 +1,7 @@
 import { DEFAULT_TOKEN_LIMIT, PENDING_REFRESH_MS, PRUNE_PENDING_EVENT } from './config.js';
 import { store, getActiveConversation, getStoredTokenLimit, saveModelTokenLimit } from './storage.js';
 import { getPendingSummary, formatCountdown } from './pruneCache.js';
+import { composePrompt } from './composer.js';
 
 export function countTokens(text) {
     return Math.ceil((text || '').length / 4);
@@ -115,7 +116,8 @@ export function updateTokenCount() {
 
     applyActiveTokenLimit();
     const currentLimit = store.activeTokenLimit;
-    const text = promptInput.value;
+    // Counts what will actually be sent, including any staged pasted payload.
+    const text = composePrompt(promptInput.value);
     const active = getActiveConversation();
     const history = active ? active.messages : [];
 

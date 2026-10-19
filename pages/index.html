@@ -176,6 +176,7 @@
                     </div>
                     <span class="text-xs text-gb-bgLight3 font-medium shrink-0">Ctrl + Enter to send</span>
                 </div>
+                <div id="composer-bar" class="composer-bar composer-bar-empty" aria-label="Pasted context"></div>
                 <div class="flex gap-4 items-end">
                     <textarea id="prompt-input" rows="5" class="w-full bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-sm rounded-lg focus:ring-1 focus:ring-gb-blueAccent focus:border-gb-blueAccent outline-none p-4 resize-y font-mono shadow-inner placeholder-gb-bgLight3" placeholder="Enter prompt here..."></textarea>
                     <div class="flex flex-col gap-2 shrink-0">
@@ -189,6 +190,45 @@
                 </div>
             </div>
         </footer>
+    </div>
+
+    <!-- Pasted Context Modal. Placed before the confirm modal so a confirmation
+         opened from here stacks above it. -->
+    <div id="paste-context-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center opacity-0 pointer-events-none transition-all duration-300">
+        <div id="paste-context-modal-box" class="bg-gb-bg border border-gb-bgLight2 rounded-xl max-w-5xl w-full h-[85vh] shadow-2xl transform translate-y-8 transition-all duration-300 flex flex-col">
+            <div class="p-5 border-b border-gb-bgLight2 flex justify-between items-center bg-gb-bgDarkest rounded-t-xl shrink-0 gap-3">
+                <div class="flex items-center gap-3 text-gb-fgLightest font-bold text-lg min-w-0">
+                    <div class="p-2 bg-gb-bgLight1 rounded-md border border-gb-bgLight3 shrink-0 text-gb-aquaAccent">
+                        <i data-lucide="paperclip" class="w-5 h-5"></i>
+                    </div>
+                    <div class="flex flex-col min-w-0">
+                        <span>Pasted Context</span>
+                        <span class="text-xs font-normal text-gb-fgDark truncate">Everything attached to the prompt except your request</span>
+                    </div>
+                </div>
+                <button id="close-paste-ctx-btn" class="text-gb-fgDark hover:text-gb-redAccent transition-colors rounded hover:bg-gb-bgLight1 p-1 shrink-0" title="Close">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+
+            <div class="flex flex-col md:flex-row flex-1 min-h-0">
+                <nav id="paste-ctx-tabs" class="modal-tabs scrollbar-hide" aria-label="Pasted context sections"></nav>
+                <div id="paste-ctx-panels" class="flex-1 min-w-0 min-h-0 flex flex-col bg-gb-bgDarkest"></div>
+            </div>
+
+            <div class="p-4 border-t border-gb-bgLight2 bg-gb-bgDarkest rounded-b-xl flex justify-between items-center gap-3 shrink-0">
+                <span id="paste-ctx-summary" class="text-xs font-mono text-gb-fgDark truncate"></span>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button id="paste-ctx-discard-btn" class="px-3 py-1.5 rounded bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-fgDark hover:text-gb-redAccent border border-gb-bgLight3 text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95" title="Remove every attachment, keeping the request text">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Discard
+                    </button>
+                    <button id="paste-ctx-raw-btn" class="px-3 py-1.5 rounded bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-blueAccent border border-gb-bgLight3 text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95" title="Put the full payload back into the prompt box as plain text">
+                        <i data-lucide="maximize-2" class="w-3.5 h-3.5"></i> Expand to raw
+                    </button>
+                    <button id="paste-ctx-done-btn" class="px-4 py-1.5 rounded bg-gb-blue hover:bg-gb-blueAccent text-gb-bgDarkest text-xs font-bold transition-all active:scale-95">Done</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Custom sliding Confirm Modal Overlay -->

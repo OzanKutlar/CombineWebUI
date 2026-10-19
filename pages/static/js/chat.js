@@ -20,6 +20,7 @@ import {
 } from './messageTree.js';
 import { removeBranchByVid, withBranchChange } from './branchOps.js';
 import { buildOutgoingMessages, recordSend } from './pruneCache.js';
+import { composePrompt, clearStaged } from './composer.js';
 
 // Upper bound on reader.read() calls for one streamed reply. Far above any
 // real response; it only stops a misbehaving server from spinning forever.
@@ -76,7 +77,9 @@ export async function handleSend() {
     const promptInput = document.getElementById('prompt-input');
     if (!promptInput) return;
 
-    const text = promptInput.value.trim();
+    // With a pasted payload staged, the box holds only the request; the full
+    // payload is rebuilt around it here.
+    const text = composePrompt(promptInput.value).trim();
     if (!text) return;
 
     applyActiveTokenLimit();
@@ -88,6 +91,7 @@ export async function handleSend() {
     // Stamped at send time so the token counter can bucket usage by day.
     active.messages.push({ role: 'user', content: text, ts: Date.now() });
     promptInput.value = '';
+    clearStaged();
     updateTokenCount();
     touchConversation(active.id);
     renderSidebar();
