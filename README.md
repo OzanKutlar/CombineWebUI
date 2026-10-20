@@ -93,6 +93,7 @@ Type `help` in the console for the full list. The main ones:
 - **Identity.** The web UI's identity setting applies. In auto mode the label decides: `Claude (web)` fills in Claude, while a label naming no model family fills `{{IDENTITY}}` neutrally and leaves a hardcoded `<identity>` line alone.
 - **Linux clipboard.** pyperclip needs `xclip`, `xsel` or `wl-clipboard`.
 - **Running next to the web UI.** CLI edits are not pushed to open browser tabs, so reload the chat there. Avoid editing the same chat in both at once.
+- **Chat list cache.** The picker caches each chat's title, message count and label in `~/.local/share/combine-webui/cli_chat_index.json`, keyed on the file's modification time and size, so only changed chats are reopened. Deleting the file is safe; it is rebuilt on the next listing.
 
 ## Configuration
 

@@ -310,13 +310,29 @@ class Thread:
     # Copies
     # ------------------------------------------------------------------
 
-    def render_variant(self, variant, count, start):
-        """(text, outgoing, message count) for the first count messages."""
+    def _outgoing_part(self, variant, count, start):
+        """(outgoing, part): the materialized messages and the slice a copy would hold."""
         items = self.messages[:count]
         mode = MODE_COMMIT if variant == VARIANT_FULL else MODE_WARM
         outgoing = materialize(items, plan_sent_paths(items, self.label, mode))
         part = outgoing['messages'] if variant == VARIANT_FULL else outgoing['messages'][start:]
+        return outgoing, part
+
+    def render_variant(self, variant, count, start):
+        """(text, outgoing, message count) for the first count messages."""
+        outgoing, part = self._outgoing_part(variant, count, start)
         return format_messages(part, self.label, self.identity_prefs), outgoing, len(part)
+
+    def variant_stats(self, variant, count, start):
+        """(message count, ≈tokens) of a copy without building its text.
+
+        Sums per-message counts, which hit the token cache for unchanged
+        messages, instead of encoding the whole formatted conversation. The
+        block headers and the identity fill are not counted.
+        """
+        _, part = self._outgoing_part(variant, count, start)
+        tokens = sum(count_tokens(msg.get('content')) for msg in part if isinstance(msg, dict))
+        return len(part), tokens
 
     def _choose_variant(self, requested, info):
         if requested == VARIANT_FULL:
@@ -523,8 +539,7 @@ class Thread:
         if self.messages:
             variant = self._choose_variant(None, info)[0]
         if variant is not None:
-            text, _, count = self.render_variant(variant, len(self.messages), info['upto'])
-            tokens = count_tokens(text)
+            count, tokens = self.variant_stats(variant, len(self.messages), info['upto'])
         last = self._cli().get('lastCopy')
         age = info['age_ms']
         return {

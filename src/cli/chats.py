@@ -1,15 +1,25 @@
-"""Chat listing and creation for CLI mode, on the same storage as the web UI."""
+"""Chat listing and creation for CLI mode, on the same storage as the web UI.
+
+Listing a chat needs only its title, message count and label, but reading a
+conversation file means opening it, and on Windows each open can cost tens of
+milliseconds (real-time antivirus scanning). The summaries are therefore
+cached in cli_chat_index.json, keyed on each file's mtime and size, so only
+chats that changed since the last listing are opened again.
+"""
+import json
 import time
 from dataclasses import dataclass
 
-from src.config import CHATS_CONV_DIR, logger
-from src.history import get_conversation, get_history_index, sanitize_conv_id
+from src.config import APP_DIR, CHATS_CONV_DIR, logger
+from src.history import atomic_write_json, get_conversation, get_history_index, sanitize_conv_id
 
 MAX_LISTED = 200
 MAX_SCANNED_IDS = 20_000
 DEFAULT_TITLE = 'New chat'
 MAX_TITLE_CHARS = 80
 SECONDS_PER_DAY = 86_400
+SUMMARY_CACHE_PATH = APP_DIR / 'cli_chat_index.json'
+SUMMARY_CACHE_VERSION = 1
 
 
 def format_age(stamp, now=None):
@@ -59,11 +69,12 @@ def conv_title(conv):
     return 'Untitled chat'
 
 
-def _mtime(conv_id):
+def _stat(conv_id):
+    """The conversation file's stat result, or None when it cannot be read."""
     try:
-        return (CHATS_CONV_DIR / f'{conv_id}.json').stat().st_mtime
+        return (CHATS_CONV_DIR / f'{conv_id}.json').stat()
     except OSError:
-        return 0.0
+        return None
 
 
 def _candidate_ids():
@@ -90,17 +101,104 @@ def _candidate_ids():
     return ids
 
 
+# ----------------------------------------------------------------------
+# Summary cache
+# ----------------------------------------------------------------------
+
+def _valid_entry(entry):
+    return (isinstance(entry, dict)
+            and isinstance(entry.get('mtime_ns'), int)
+            and isinstance(entry.get('size'), int)
+            and isinstance(entry.get('title'), str)
+            and isinstance(entry.get('count'), int)
+            and isinstance(entry.get('label'), str))
+
+
+def _load_cache(path):
+    """Cached summaries by chat id. A missing or unreadable cache is simply empty."""
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError) as e:
+        logger.debug(f'Ignoring the chat summary cache {path}: {e}')
+        return {}
+    if not isinstance(raw, dict) or raw.get('version') != SUMMARY_CACHE_VERSION:
+        return {}
+    entries = raw.get('entries')
+    if not isinstance(entries, dict):
+        return {}
+    clean = {}
+    for conv_id, entry in entries.items():
+        if len(clean) >= MAX_SCANNED_IDS:
+            break
+        if isinstance(conv_id, str) and _valid_entry(entry):
+            clean[conv_id] = entry
+    return clean
+
+
+def _save_cache(path, entries):
+    payload = {'version': SUMMARY_CACHE_VERSION, 'entries': entries}
+    if not atomic_write_json(path, payload):
+        logger.debug(f'Could not write the chat summary cache {path}; the next listing reopens every chat.')
+
+
+def _cached_summary(cache, conv_id, st):
+    """The cached entry when the file is unchanged since it was summarized, else None."""
+    entry = cache.get(conv_id)
+    if entry is None or entry['mtime_ns'] != st.st_mtime_ns or entry['size'] != st.st_size:
+        return None
+    return entry
+
+
+def _read_summary(conv_id, st):
+    """Opens one conversation and reduces it to what the picker shows, or None."""
+    conv = get_conversation(conv_id)
+    if not isinstance(conv, dict):
+        return None
+    messages = conv.get('messages') if isinstance(conv.get('messages'), list) else []
+    cli = conv.get('cli') if isinstance(conv.get('cli'), dict) else {}
+    return {'mtime_ns': st.st_mtime_ns, 'size': st.st_size, 'title': conv_title(conv),
+            'count': len(messages), 'label': str(cli.get('label') or '')}
+
+
+def _stamped_ids():
+    """(mtime, id, stat) for every chat file that exists, newest first."""
+    stamped = []
+    for conv_id in _candidate_ids():
+        st = _stat(conv_id)
+        if st is not None:
+            stamped.append((st.st_mtime, conv_id, st))
+    stamped.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    return stamped
+
+
 def list_chats(limit=MAX_LISTED):
-    """Saved chats, most recently modified first."""
-    stamped = sorted(((_mtime(conv_id), conv_id) for conv_id in _candidate_ids()), reverse=True)
+    """Saved chats, most recently modified first.
+
+    Only chats whose file changed since the last listing are opened.
+    """
+    stamped = _stamped_ids()
+    cache = _load_cache(SUMMARY_CACHE_PATH)
+    entries = {}
+    changed = False
     chats = []
-    for stamp, conv_id in stamped[:limit]:
-        conv = get_conversation(conv_id)
-        if not isinstance(conv, dict):
-            continue
-        messages = conv.get('messages') if isinstance(conv.get('messages'), list) else []
-        cli = conv.get('cli') if isinstance(conv.get('cli'), dict) else {}
-        chats.append(ChatInfo(conv_id, conv_title(conv), stamp, len(messages), str(cli.get('label') or '')))
+    for stamp, conv_id, st in stamped[:limit]:
+        entry = _cached_summary(cache, conv_id, st)
+        if entry is None:
+            entry = _read_summary(conv_id, st)
+            if entry is None:
+                continue
+            changed = True
+        entries[conv_id] = entry
+        chats.append(ChatInfo(conv_id, entry['title'], stamp, entry['count'], entry['label']))
+    # Chats beyond the listing limit keep their entries; deleted chats lose theirs.
+    existing = {conv_id for _, conv_id, _ in stamped}
+    for conv_id, entry in cache.items():
+        if conv_id in existing and conv_id not in entries:
+            entries[conv_id] = entry
+    if changed or len(entries) != len(cache):
+        _save_cache(SUMMARY_CACHE_PATH, entries)
     return chats
 
 

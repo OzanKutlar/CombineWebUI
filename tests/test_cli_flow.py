@@ -9,7 +9,7 @@ from src.cli.staging import Staging, parse_paste_text
 from src.cli.workflow import Thread
 from src.prompt_parser import PRUNED_PREFIX
 from src.prune_cache import build_outgoing_messages
-from src.prune_core import desired_prune_paths, set_prune_state
+from src.prune_core import count_tokens, desired_prune_paths, set_prune_state
 
 ROOT = Path(__file__).resolve().parent.parent
 T0 = 1_700_000_000_000
@@ -118,6 +118,15 @@ class CopyFlowTests(unittest.TestCase):
         text, _, _ = thread.prepare_copy(None, T0)
         self.assertIn('second', text)
         self.assertNotIn('first', text)
+
+    def test_snapshot_estimate_matches_the_copy(self):
+        thread = make_thread()
+        thread.add_user(payload(), T0)
+        snap = thread.snapshot(T0)
+        text, variant, _ = thread.prepare_copy(None, T0)
+        self.assertEqual(snap['next_variant'], variant)
+        self.assertEqual(snap['next_count'], 1)
+        self.assertLessEqual(abs(count_tokens(text) - snap['next_tokens']), 20)
 
 
 class StagingTests(unittest.TestCase):
