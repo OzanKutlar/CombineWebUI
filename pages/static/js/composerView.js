@@ -6,6 +6,7 @@ import {
     parsePasteText,
     isStageablePaste,
     stagePayload,
+    appendFilesToStaged,
     getStaged,
     hasStaged,
     clearStaged,
@@ -198,9 +199,25 @@ function readClipboardText(event) {
     }
 }
 
+function appendIntoInput(input, raw, parsed) {
+    if (!appendFilesToStaged(raw, parsed)) return false;
+    const request = (parsed && parsed.userRequest) ? parsed.userRequest : '';
+    if (input && !input.value.trim() && request) {
+        input.value = request;
+    }
+    if (isModalOpen()) {
+        renderModal();
+    }
+    if (input) {
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        if (!isModalOpen()) input.focus();
+    }
+    return true;
+}
+
 /** Plain text falls through to the browser; only structured payloads are staged. */
 function handlePaste(event) {
-    const input = event.currentTarget;
+    const input = event.currentTarget || promptBox();
     if (!input) return;
 
     const raw = readClipboardText(event);
@@ -212,6 +229,8 @@ function handlePaste(event) {
         stageIntoInput(input, raw, parsed, false);
         return;
     }
+    if (appendIntoInput(input, raw, parsed)) return;
+
     showConfirmModal(
         'Replace Pasted Context',
         'A pasted payload is already attached to this prompt. Replace it with the new one? The request text in the prompt box is replaced as well.',

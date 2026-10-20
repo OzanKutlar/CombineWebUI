@@ -17,6 +17,8 @@ const MAX_PASTE_CHARS = 20000000;
 const MAX_EDITS = 4000;
 // Every combineCopy header and FILE block contains it, so it is a cheap gate.
 const PASTE_MARKER = '---';
+const FILE_SEP = '-'.repeat(35);
+const FILE_CONTEXT_HEADER_RE = /^--- (?:REQUESTED )?FILE CONTEXT ---[ \t]*\r?\n?/m;
 
 let staged = null;
 const listeners = new Set();
@@ -59,6 +61,148 @@ export function isStageablePaste(parsed) {
 export function stagePayload(raw, parsed) {
     if (typeof raw !== 'string' || !raw || !isStageablePaste(parsed)) return false;
     staged = { raw, parsed, removedFiles: new Set(), removedSections: new Set() };
+    notify();
+    return true;
+}
+
+function normalizeFilePath(path) {
+    return typeof path === 'string' ? path.trim().replace(/\\/g, '/') : '';
+}
+
+function extractFileBlockText(raw, file) {
+    if (file && isValidRange(raw, file.start, file.end)) {
+        const slice = raw.slice(file.start, file.end).trimEnd();
+        if (/\n```$/.test(slice)) {
+            return slice + '\n\n';
+        }
+    }
+    const path = (file && typeof file.path === 'string') ? file.path.trim() : '';
+    const body = (file && typeof file.content === 'string') ? file.content : '';
+    return FILE_SEP + '\nFILE: ' + path + '\n' + FILE_SEP + '\n```\n' + body + '\n```\n\n';
+}
+
+function deduplicateIncomingFiles(files) {
+    const list = [];
+    const indexByKey = new Map();
+    files.forEach(file => {
+        if (!file || typeof file !== 'object') return;
+        const key = normalizeFilePath(file.path);
+        if (!key) {
+            list.push(file);
+            return;
+        }
+        if (indexByKey.has(key)) {
+            const prevIdx = indexByKey.get(key);
+            if (!file.isPruned || list[prevIdx].isPruned) {
+                list[prevIdx] = file;
+            }
+            return;
+        }
+        indexByKey.set(key, list.length);
+        list.push(file);
+    });
+    return list;
+}
+
+function findFileInsertTarget(raw, parsed) {
+    const files = Array.isArray(parsed.files) ? parsed.files : [];
+    if (files.length > 0) {
+        return { offset: files[files.length - 1].end, needsHeader: false };
+    }
+    const headerMatch = FILE_CONTEXT_HEADER_RE.exec(raw);
+    if (headerMatch) {
+        return { offset: headerMatch.index + headerMatch[0].length, needsHeader: false };
+    }
+    const sections = Array.isArray(parsed.sections) ? parsed.sections : [];
+    if (sections.length > 0 && Number.isInteger(sections[0].start)) {
+        return { offset: sections[0].start, needsHeader: true };
+    }
+    return { offset: raw.length, needsHeader: true };
+}
+
+/**
+ * Merges files from a newly pasted payload into the currently staged payload.
+ * Matching paths are updated in place; new paths are appended to the files
+ * section. Returns false when no staged payload or no incoming files exist.
+ */
+export function appendFilesToStaged(raw, parsed) {
+    if (!staged || typeof raw !== 'string' || !raw) return false;
+    if (!parsed || parsed.isStructured !== true) return false;
+    const incomingFiles = Array.isArray(parsed.files) ? parsed.files : [];
+    if (incomingFiles.length === 0) return false;
+
+    const existingFiles = Array.isArray(staged.parsed.files) ? staged.parsed.files : [];
+    const existingByKey = new Map();
+    existingFiles.forEach((file, idx) => {
+        const key = normalizeFilePath(file && file.path);
+        if (key) existingByKey.set(key, idx);
+    });
+
+    const removedPaths = new Set();
+    staged.removedFiles.forEach(idx => {
+        const file = existingFiles[idx];
+        const key = normalizeFilePath(file && file.path);
+        if (key) removedPaths.add(key);
+    });
+
+    const edits = [];
+    const appendedBlocks = [];
+    let replacedLastFile = false;
+
+    deduplicateIncomingFiles(incomingFiles).forEach(incFile => {
+        const key = normalizeFilePath(incFile.path);
+        if (key) removedPaths.delete(key);
+
+        if (key && existingByKey.has(key)) {
+            const existingIdx = existingByKey.get(key);
+            const existingFile = existingFiles[existingIdx];
+            if (incFile.isPruned && !existingFile.isPruned) return;
+            if (isValidRange(staged.raw, existingFile.start, existingFile.end)) {
+                edits.push({
+                    start: existingFile.start,
+                    end: existingFile.end,
+                    text: extractFileBlockText(raw, incFile)
+                });
+                if (existingIdx === existingFiles.length - 1) replacedLastFile = true;
+                return;
+            }
+        }
+        appendedBlocks.push(extractFileBlockText(raw, incFile));
+    });
+
+    if (appendedBlocks.length > 0) {
+        const target = findFileInsertTarget(staged.raw, staged.parsed);
+        const lead = (!replacedLastFile && target.offset > 0 && staged.raw[target.offset - 1] !== '\n') ? '\n' : '';
+        const header = target.needsHeader ? '--- FILE CONTEXT ---\n' : '';
+        edits.push({
+            start: target.offset,
+            end: target.offset,
+            text: lead + header + appendedBlocks.join('')
+        });
+    }
+
+    const nextRaw = edits.length > 0 ? applyEdits(staged.raw, edits) : staged.raw;
+    if (nextRaw.length > MAX_PASTE_CHARS) return false;
+    const nextParsed = edits.length > 0 ? parsePasteText(nextRaw) : staged.parsed;
+    if (!isStageablePaste(nextParsed)) return false;
+
+    const nextRemovedFiles = new Set();
+    nextParsed.files.forEach((file, idx) => {
+        const key = normalizeFilePath(file && file.path);
+        if (key && removedPaths.has(key)) nextRemovedFiles.add(idx);
+    });
+
+    const nextRemovedSections = new Set();
+    staged.removedSections.forEach(idx => {
+        if (idx >= 0 && idx < nextParsed.sections.length) nextRemovedSections.add(idx);
+    });
+
+    staged = {
+        raw: nextRaw,
+        parsed: nextParsed,
+        removedFiles: nextRemovedFiles,
+        removedSections: nextRemovedSections
+    };
     notify();
     return true;
 }
