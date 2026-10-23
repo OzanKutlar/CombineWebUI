@@ -25,10 +25,20 @@
     <link rel="icon" type="image/svg+xml" href="/static/icons/logo.svg">
     <link rel="apple-touch-icon" href="/static/icons/logo.svg">
     <link rel="manifest" href="/static/manifest.json">
-    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    <!-- Desktop mode bridge (python main.py desktop). Does nothing in a normal
+         browser. Must stay above every module script: it replaces fetch and
+         EventSource for /v1/ URLs. -->
+    <script src="/static/js/desktopBridge.js"></script>
+    <!-- Local copies from scripts/fetch_vendor.py, so the page needs no internet
+         access. Each one falls back to its CDN when the copy is missing. -->
+    <script src="/static/vendor/tailwindcss.js"></script>
+    <script>window.tailwind || document.write('<script src="https://cdn.tailwindcss.com?plugins=typography"><\/script>');</script>
+    <script src="/static/vendor/lucide.js"></script>
+    <script>window.lucide || document.write('<script src="https://unpkg.com/lucide@latest"><\/script>');</script>
+    <script src="/static/vendor/marked.min.js"></script>
+    <script>window.marked || document.write('<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>');</script>
+    <script src="/static/vendor/purify.min.js"></script>
+    <script>window.DOMPurify || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"><\/script>');</script>
     <link rel="stylesheet" href="/static/css/themes.css">
     <link rel="stylesheet" href="/static/css/theme.css">
     <script>

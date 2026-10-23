@@ -1,0 +1,8 @@
+# Desktop mode only (python main.py desktop): the web UI in a native window,
+# served in-process with no listening socket, so uvicorn is not needed.
+fastapi>=0.100.0
+httpx>=0.25.0
+httpx-sse>=0.3.1
+tiktoken>=0.5.0
+rich>=13.0.0
+PySide6>=6.5

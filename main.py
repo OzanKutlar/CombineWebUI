@@ -189,6 +189,19 @@ def cmd_cli(args):
     run_cli(chat_id=args.chat, label=args.label)
 
 
+def cmd_desktop(args):
+    _configure_logging(args.verbose)
+    state.use_proxy_env = bool(args.proxy_env)
+    ensure_paths()
+    # Imported here so Qt is only loaded in desktop mode.
+    try:
+        from src.desktop.app import run_desktop
+    except ImportError as e:
+        logger.error(f"Desktop mode could not load ({e}). Install it with: pip install -r requirements-desktop.txt")
+        sys.exit(1)
+    sys.exit(run_desktop())
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="CombineWebUI: a chat UI for OpenAI-compatible endpoints")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -208,13 +221,18 @@ def build_parser():
     cli_p.add_argument("-c", "--chat", help="Open this chat id instead of showing the picker")
     cli_p.add_argument("-l", "--label", help="Web chat label such as Claude (web); selects its cache policy and identity")
     cli_p.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
+
+    desktop_p = subparsers.add_parser("desktop", help="Open the UI in a native window with no listening socket")
+    desktop_p.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging, including page console output")
+    desktop_p.add_argument("--proxy-env", action="store_true", help="Honour HTTP_PROXY / HTTPS_PROXY for upstream calls")
     return parser
 
 
 COMMANDS = {
     "start": cmd_start,
     "token-counter": cmd_token_counter,
-    "cli": cmd_cli
+    "cli": cmd_cli,
+    "desktop": cmd_desktop
 }
 
 

@@ -43,6 +43,7 @@ Copilot models carry a premium `multiplier`, so CombineWebUI marks them as **met
 | `python main.py start [--host H] [--port P] [-v] [--proxy-env]` | Start the server (default `127.0.0.1:4142`) |
 | `python main.py token-counter [--json] [--refresh] [--clear-cache]` | Tally tokens across all saved chats |
 | `python main.py cli [-c CHAT] [-l LABEL] [-v]` | Clipboard chat console with no server and no API calls. See [CLI mode](#cli-mode-no-server) |
+| `python main.py desktop [-v] [--proxy-env]` | The full UI in a native window with no listening socket. See [Desktop mode](#desktop-mode-no-ports) |
 
 ## CLI mode (no server)
 
@@ -94,6 +95,56 @@ Type `help` in the console for the full list. The main ones:
 - **Linux clipboard.** pyperclip needs `xclip`, `xsel` or `wl-clipboard`.
 - **Running next to the web UI.** CLI edits are not pushed to open browser tabs, so reload the chat there. Avoid editing the same chat in both at once.
 - **Chat list cache.** The picker caches each chat's title, message count and label in `~/.local/share/combine-webui/cli_chat_index.json`, keyed on the file's modification time and size, so only changed chats are reopened. Deleting the file is safe; it is rebuilt on the next listing.
+
+## Desktop mode (no ports)
+
+For machines where no local server may run. `python main.py desktop` opens the full web UI in a native window (Qt WebEngine) and never opens a listening socket. Pages are served from an in-process `app://` scheme, and every API call reaches the FastAPI app directly over Qt's QWebChannel. The only network traffic is outbound requests to your endpoints.
+
+Setup on macOS:
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-desktop.txt
+python scripts/fetch_vendor.py            # once: local copies of Tailwind, Lucide, marked and DOMPurify
+chmod +x scripts/combine-desktop.command  # once: lets you double-click the launcher
+```
+
+Run it with `python main.py desktop`, or double-click `scripts/combine-desktop.command` in Finder.
+
+### Checking that nothing listens
+
+While the window is open, this prints nothing:
+
+```sh
+lsof -nP -iTCP -sTCP:LISTEN | grep -iE 'python|qtwebengine'
+```
+
+To see every connection the app makes (only outbound ones to your endpoints):
+
+```sh
+lsof -nP -iTCP -a -p "$(pgrep -f 'main.py desktop')"
+```
+
+Chromium's DevTools server is the only part of Qt WebEngine that can listen on a port. It is disabled: `QTWEBENGINE_REMOTE_DEBUGGING` and any remote debugging flags are removed before Qt starts.
+
+### Endpoint security software
+
+Run it from the virtual environment as above rather than packaging it into an unsigned `.app`. Unsigned bundles are a common cause of false positives. To check with Microsoft Defender:
+
+```sh
+mdatp scan custom --path "$PWD"
+mdatp threat list
+```
+
+### Notes
+
+- **Same data.** Chats, settings and prices are the files the web UI and CLI mode use. Avoid editing one chat in two modes at once.
+- **Local endpoints are servers too.** copilot-api, Ollama and LM Studio listen on their own ports. Desktop mode only removes CombineWebUI's port.
+- **Browser storage** (theme cache, learned token limits) lives in `~/.local/share/combine-webui/desktop-profile`.
+- **Links** in replies open in your default browser.
+- **Libraries.** Without the local copies from `scripts/fetch_vendor.py`, the page falls back to the CDNs.
+- **Debugging.** `-v` logs the page's console output as `[page]` lines.
 
 ## Configuration
 
