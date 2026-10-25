@@ -1,5 +1,5 @@
 import { store } from './storage.js';
-import { createModelAvatar } from './avatar.js';
+import { createModelAvatar, createProviderLogoImg } from './avatar.js';
 import { wireModalTabs } from './modalTabs.js';
 import { renderBarChart } from './chart.js';
 import { readThemeColor, THEME_EVENT } from './theme.js';
@@ -128,25 +128,25 @@ function currentModelRows() {
 // Shared cell builders
 // ---------------------------------------------------------------------------
 
-function renderProviderImage(logoUrl, name) {
-    const wrap = document.createElement('div');
-    wrap.className = 'w-5 h-5 rounded flex items-center justify-center shrink-0 overflow-hidden bg-white p-0.5 border border-gb-bgLight3';
-    if (logoUrl) {
-        const img = document.createElement('img');
-        img.src = logoUrl;
-        img.alt = name || 'Provider';
-        img.className = 'w-full h-full object-contain';
-        img.onerror = () => {
-            wrap.className = 'w-5 h-5 rounded flex items-center justify-center shrink-0 bg-gb-bgLight1 text-gb-aquaAccent';
-            wrap.innerHTML = '<i data-lucide="box" class="w-3.5 h-3.5"></i>';
-            lucide.createIcons({ root: wrap });
-        };
-        wrap.appendChild(img);
-    } else {
-        wrap.className = 'w-5 h-5 rounded flex items-center justify-center shrink-0 bg-gb-bgLight1 text-gb-aquaAccent';
-        wrap.innerHTML = '<i data-lucide="box" class="w-3.5 h-3.5"></i>';
-    }
+/** Same tinted disc as a real logo, holding a generic box icon. */
+function createProviderFallback() {
+    const wrap = document.createElement('span');
+    wrap.className = 'provider-logo provider-logo-sm provider-logo-fallback';
+    wrap.innerHTML = '<i data-lucide="box" class="w-3.5 h-3.5"></i>';
     return wrap;
+}
+
+function renderProviderImage(logoUrl, name) {
+    if (typeof logoUrl !== 'string' || !logoUrl) return createProviderFallback();
+
+    const img = createProviderLogoImg(logoUrl, name || 'Provider', 'sm');
+    img.onerror = () => {
+        if (!img.isConnected) return;
+        const fallback = createProviderFallback();
+        img.replaceWith(fallback);
+        lucide.createIcons({ root: fallback });
+    };
+    return img;
 }
 
 function numericCell(value, className) {

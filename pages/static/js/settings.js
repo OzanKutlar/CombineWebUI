@@ -341,8 +341,8 @@ export function renderSettingsProviderGroups() {
 
         row.innerHTML = `
             <div class="flex flex-col sm:flex-row gap-3 w-full items-start sm:items-center">
-                <div class="w-10 h-10 rounded bg-white p-1 flex items-center justify-center shrink-0 border border-gb-bgLight3 overflow-hidden shadow-inner group-preview-box-${idx}">
-                    <img src="" alt="Logo" class="w-full h-full object-contain group-preview-img-${idx} hidden">
+                <div class="w-11 h-11 rounded-full flex items-center justify-center shrink-0 group-preview-box-${idx}">
+                    <img src="" alt="Logo" class="provider-logo provider-logo-xl group-preview-img-${idx} hidden">
                     <i data-lucide="image" class="w-5 h-5 text-gb-bgLight3 group-preview-placeholder-${idx}"></i>
                 </div>
                 <div class="w-40">

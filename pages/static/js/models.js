@@ -1,5 +1,5 @@
 import { store, persistSelectedModel, persistHiddenModels, persistAutoNameModel, isPreserveEnabled, setPreserveEnabled, isFavoriteModel, toggleFavoriteModel } from './storage.js';
-import { getModelLogo } from './avatar.js';
+import { getModelLogo, createProviderLogoImg } from './avatar.js';
 import { MAX_FAVORITE_MODELS } from './config.js';
 import { applyActiveTokenLimit, updateTokenCount } from './tokens.js';
 import { getAutoNameCandidates, resolveAutoNameModel, isCopilotNamingModel } from './autoName.js';
@@ -197,10 +197,8 @@ function createFavoriteButton(entry) {
     btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
     btn.onclick = () => onFavoriteClick(model.id);
 
-    const img = document.createElement('img');
-    img.src = entry.logo;
-    img.alt = '';
-    img.className = 'w-5 h-5 rounded-sm object-contain bg-white p-0.5 pointer-events-none';
+    const img = createProviderLogoImg(entry.logo, '', 'md');
+    img.classList.add('pointer-events-none');
     // A broken logo would leave an empty square, so the button goes instead.
     img.onerror = () => {
         const bar = btn.parentElement;
@@ -339,15 +337,11 @@ export function renderModelMatrix() {
         header.className = 'flex items-center gap-3 border-b border-gb-bgLight2 pb-2';
 
         if (group.logo && group.logo !== '') {
-            const img = document.createElement('img');
-            img.src = group.logo;
-            img.alt = group.name;
-            img.className = 'w-6 h-6 object-contain bg-white rounded-sm p-0.5';
-            header.appendChild(img);
+            header.appendChild(createProviderLogoImg(group.logo, group.name, 'lg'));
         } else {
             const icon = document.createElement('i');
             icon.setAttribute('data-lucide', 'box');
-            icon.className = 'w-6 h-6 text-gb-fgDark';
+            icon.className = 'w-8 h-8 text-gb-fgDark';
             header.appendChild(icon);
         }
 

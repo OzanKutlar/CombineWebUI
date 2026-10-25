@@ -19,6 +19,25 @@ const BLOB_TOKENS = [
 ];
 const MAX_BLOB_CHARS = 10;
 
+// Size modifiers defined in theme.css (.provider-logo-sm and friends).
+const LOGO_SIZES = ['sm', 'md', 'lg', 'xl'];
+const DEFAULT_LOGO_SIZE = 'sm';
+
+/**
+ * A circular, theme-tinted provider logo. The single place logo styling is
+ * decided, so the chat, picker, favorites, matrix and token counter can never
+ * drift apart. Unknown sizes fall back to the small one.
+ */
+export function createProviderLogoImg(src, alt, size) {
+    const safeSize = LOGO_SIZES.indexOf(size) !== -1 ? size : DEFAULT_LOGO_SIZE;
+    const img = document.createElement('img');
+    img.className = 'provider-logo provider-logo-' + safeSize;
+    img.alt = typeof alt === 'string' ? alt : '';
+    img.decoding = 'async';
+    if (typeof src === 'string' && src) img.src = src;
+    return img;
+}
+
 /** 'moonshotai/Kimi-K3:fastest' -> 'Kimi-K3' */
 export function deriveShortName(modelId) {
     if (typeof modelId !== 'string' || !modelId) return '';
@@ -105,11 +124,8 @@ export function createModelAvatar(modelId) {
     const provider = resolveProvider(modelId);
     if (!provider) return createBlob(modelId);
 
-    const img = document.createElement('img');
-    img.src = provider.logo;
-    img.alt = provider.name || modelId;
+    const img = createProviderLogoImg(provider.logo, provider.name || modelId, 'sm');
     img.title = modelId;
-    img.className = 'w-5 h-5 rounded-sm object-contain bg-white p-0.5 shrink-0';
     img.onerror = () => {
         if (img.isConnected) img.replaceWith(createBlob(modelId));
     };
