@@ -5,7 +5,7 @@ import { applyActiveTokenLimit, updateTokenCount } from './tokens.js';
 import { wireConfirmModal, showConfirmModal } from './modals.js';
 import { fetchModels, openModelModal, closeModelModal, toggleShowHiddenModels } from './models.js';
 import { openSettingsModal, closeSettingsModal, addEndpoint, addProviderGroup, saveSettings } from './settings.js';
-import { renderSidebar, initConversations, createNewChat, createNewFolder, saveConversations, startAutoNaming, startAutoFolder, setSidebarViewMode } from './sidebar.js';
+import { renderSidebar, initConversations, createNewChat, createNewFolder, saveConversations, startAutoNaming, startAutoFolder, setSidebarViewMode, wireChatsModal, closeChatsModal } from './sidebar.js';
 import { wireAutoFolderModal, closeAutoFolderModal } from './autoFolderModal.js';
 import { wireSaveProgressModal, closeSaveProgressModal, isSaveProgressActive } from './saveProgress.js';
 import { renderChat, handleSend } from './chat.js';
@@ -15,7 +15,7 @@ import { closePopupMenu } from './popupMenu.js';
 import { wirePruneDrawer, closePruneDrawer, isPruneDrawerOpen, renderPruneDrawer } from './pruneDrawer.js';
 import { PRUNE_PENDING_EVENT } from './config.js';
 import { wireCodeBlocks } from './codeblock.js';
-import { wireSearchModal, closeSearchModal } from './search.js';
+import { wireSearchModal, closeSearchModal, isSearchModalOpen } from './search.js';
 import { wireTokenCounterModal, closeTokenCounterModal } from './tokenCounterModal.js';
 import { wireComposer, closePasteContextModal } from './composerView.js';
 import { hasStaged } from './composer.js';
@@ -30,6 +30,7 @@ function wireEvents() {
     wirePruneDrawer();
     wireCodeBlocks();
     wireSearchModal();
+    wireChatsModal();
     wireTokenCounterModal();
     wireComposer();
 
@@ -45,6 +46,11 @@ function wireEvents() {
     document.addEventListener('click', closeActiveDropdown);
     document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
+        // Search can open on top of the Chats modal; Escape backs out of it alone.
+        if (isSearchModalOpen()) {
+            closeSearchModal();
+            return;
+        }
         closeActiveDropdown();
         closePopupMenu();
         closeAutoFolderModal();
@@ -52,6 +58,7 @@ function wireEvents() {
         closeSearchModal();
         closeTokenCounterModal();
         closePasteContextModal();
+        closeChatsModal();
         if (!isSaveProgressActive()) {
             closeSaveProgressModal();
         }

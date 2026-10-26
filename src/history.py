@@ -324,6 +324,7 @@ def get_all_history() -> dict:
 
     if CHATS_CONV_DIR.exists():
         try:
+            adopted = 0
             for f in CHATS_CONV_DIR.glob("*.json"):
                 cid = f.stem
                 if cid not in seen and sanitize_conv_id(cid):
@@ -331,8 +332,14 @@ def get_all_history() -> dict:
                     if conv:
                         conversations.append(conv)
                         order.append(cid)
-            idx["order"] = order
-            save_history_index(idx)
+                        seen.add(cid)
+                        adopted += 1
+            # Rewriting and broadcasting the index on every page load was pure
+            # overhead; it is only needed when orphan files were adopted.
+            if adopted:
+                idx["order"] = order
+                save_history_index(idx)
+                logger.info(f"Adopted {adopted} orphan conversation file(s) into the history index")
         except Exception as e:
             logger.warn(f"Failed scanning orphan conversations: {e}")
 

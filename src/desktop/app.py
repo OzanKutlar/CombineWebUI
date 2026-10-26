@@ -10,9 +10,10 @@ import base64
 import binascii
 import json
 import os
+import signal
 import sys
 
-from PySide6.QtCore import QBuffer, QByteArray, QFile, QIODevice, QObject, Qt, QUrl, Signal, Slot
+from PySide6.QtCore import QBuffer, QByteArray, QFile, QIODevice, QObject, Qt, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineCore import (
@@ -47,6 +48,11 @@ REMOTE_DEBUG_ENV = 'QTWEBENGINE_REMOTE_DEBUGGING'
 CHROMIUM_FLAGS_ENV = 'QTWEBENGINE_CHROMIUM_FLAGS'
 REMOTE_DEBUG_MARKER = 'remote-debugging'
 PAGE_ATTRIBUTES = ('JavascriptCanAccessClipboard', 'JavascriptCanPaste', 'LocalStorageEnabled')
+# Ctrl+C in the terminal closes the window. Qt's loop runs in C++, so a timer
+# hands Python control this often to run the signal handler.
+SIGNAL_POLL_MS = 200
+INTERRUPT_EXIT_CODE = 130
+INTERRUPT_SIGNALS = ('SIGINT', 'SIGTERM', 'SIGBREAK')
 
 
 # ---------------------------------------------------------------------------
@@ -331,6 +337,55 @@ def _build_profile(parent):
     return profile
 
 
+class _InterruptGuard:
+    """Turns SIGINT (and SIGTERM / SIGBREAK where they exist) into app.quit().
+
+    Python runs signal handlers only between bytecodes, and Qt's event loop
+    runs in C++, so a no-op timer gives Python control a few times a second.
+    A second interrupt exits at once, in case shutdown itself hangs.
+    """
+
+    def __init__(self, app):
+        self._app = app
+        self.interrupted = False
+        self._previous = {}
+        self._timer = QTimer(app)
+        self._timer.timeout.connect(self._wake)
+        self._timer.start(SIGNAL_POLL_MS)
+        for name in INTERRUPT_SIGNALS:
+            self._install(name)
+
+    def _install(self, name):
+        signum = getattr(signal, name, None)
+        if signum is None:
+            return
+        try:
+            self._previous[signum] = signal.signal(signum, self._handle)
+        except (ValueError, OSError, RuntimeError) as e:
+            logger.debug(f'Could not handle {name}: {e}')
+
+    def _wake(self):
+        """Empty on purpose: returning to Python is what lets a pending handler run."""
+
+    def _handle(self, signum, frame):
+        if self.interrupted:
+            logger.warn('Second interrupt: exiting immediately.')
+            os._exit(INTERRUPT_EXIT_CODE)
+        self.interrupted = True
+        logger.info('Interrupt received; closing the desktop window...')
+        self._app.quit()
+
+    def restore(self):
+        """Stops the timer and puts the previous handlers back."""
+        self._timer.stop()
+        for signum, previous in self._previous.items():
+            try:
+                signal.signal(signum, previous if previous is not None else signal.SIG_DFL)
+            except (ValueError, OSError, RuntimeError, TypeError) as e:
+                logger.debug(f'Could not restore the handler for signal {signum}: {e}')
+        self._previous.clear()
+
+
 def _load_server_app():
     # Runs on the bridge thread, so asyncio objects created at import bind to its loop.
     from src.server import app
@@ -364,12 +419,22 @@ def run_desktop():
         logger.error(str(e))
         return 1
     window = None
+    guard = None
     try:
         profile = _build_profile(app)
         window = MainWindow(profile, WebBridge(asgi, app))
         window.show()
-        logger.success('Desktop window open. Nothing is listening on a port; API calls stay in-process.')
-        return app.exec()
+        # Installed only now: app.quit() before exec() would be ignored.
+        guard = _InterruptGuard(app)
+        logger.success('Desktop window open. Nothing is listening on a port; API calls stay in-process. '
+                       'Ctrl+C here closes the window.')
+        if guard.interrupted:
+            return INTERRUPT_EXIT_CODE
+        code = app.exec()
+        return INTERRUPT_EXIT_CODE if guard.interrupted else code
     finally:
         _dispose(window)
         asgi.stop()
+        # Restored last, so a second Ctrl+C during cleanup still exits at once.
+        if guard is not None:
+            guard.restore()

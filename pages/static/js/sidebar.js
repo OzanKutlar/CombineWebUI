@@ -8,7 +8,6 @@ import {
     saveConversationToBackend,
     saveIndexToBackend,
     deleteConversationOnBackend,
-    saveHistoryToBackend,
     getFolderChildren,
     canMoveFolder
 } from './storage.js';
@@ -22,7 +21,9 @@ import {
     AUTO_NAME_MAX_TOKENS,
     AUTO_NAME_REASONING_EFFORT,
     AUTO_FOLDER_MAX_TOKENS,
-    MAX_FOLDER_DEPTH
+    MAX_FOLDER_DEPTH,
+    SIDEBAR_RECENT_LIMIT,
+    CHATS_MODAL_CLEAR_DELAY_MS
 } from './config.js';
 import {
     AUTO_FOLDER_SYSTEM_PROMPT,
@@ -44,11 +45,19 @@ const NAMING_SYSTEM_PROMPT = 'You are a helpful assistant. You will be given an 
 const AUTO_NAME_BTN_HTML = '<i data-lucide="zap" class="w-3.5 h-3.5"></i> Auto Name';
 const NO_NAMING_MODEL_MSG = 'No local or custom endpoint model is available for auto-naming. Add one in Settings.';
 
+/**
+ * Persists the active id, the index and the active conversation only. Every
+ * other conversation is saved by whatever changed it, so nothing here
+ * re-serializes the whole history.
+ */
 export function saveConversations() {
     persistActiveConvId();
-    saveHistoryToBackend();
+    saveIndexToBackend();
+    const active = getActiveConversation();
+    if (active) saveConversationToBackend(active);
 }
 
+/** Picks the active chat after a load. Writes nothing back: the data just came from disk. */
 export function initConversations() {
     if (!Array.isArray(store.folders)) store.folders = [];
     if (store.conversations.length === 0) {
@@ -58,10 +67,11 @@ export function initConversations() {
     if (!store.activeConvId || !store.conversations.some(c => c.id === store.activeConvId)) {
         store.activeConvId = store.conversations[0].id;
     }
-    saveConversations();
+    persistActiveConvId();
 }
 
 export function createNewChat(folderId) {
+    closeChatsModal();
     const id = 'conv_' + Date.now();
     const now = Date.now();
     store.conversations.unshift({
@@ -86,6 +96,8 @@ export function setSidebarViewMode(mode) {
         store.conversations.sort((a, b) => getConvTimestamp(b) - getConvTimestamp(a));
         saveIndexToBackend();
     }
+    const list = document.getElementById('chats-modal-list');
+    if (list) list.scrollTop = 0;
     renderSidebar();
 }
 
@@ -319,7 +331,8 @@ async function nameConversation(conv, modelId) {
         // Cleared so a forced rename does not permanently exclude the thread
         // from later bulk runs.
         conv.isCustomName = false;
-        saveConversations();
+        // Only this chat changed, and it need not be the active one.
+        saveConversationToBackend(conv);
         // The sidebar row is repainted by the caller, but the workspace header and
         // document.title are not, so they are refreshed here for the active thread.
         if (conv.id === store.activeConvId) {
@@ -473,17 +486,19 @@ export async function autoNameConversation(convId) {
 // Sidebar rendering
 // ---------------------------------------------------------------------------
 
+/** Returns true when convId is the open chat afterwards. */
 export function switchToConversation(convId) {
     if (store.isProcessing) {
         alert('Please stop the current generation before switching threads.');
-        return;
+        return false;
     }
-    if (store.activeConvId === convId) return;
+    if (store.activeConvId === convId) return true;
     store.activeConvId = convId;
     persistActiveConvId();
     renderSidebar();
     renderChat();
     updateTokenCount();
+    return true;
 }
 
 /**
@@ -502,6 +517,8 @@ function beginInlineRename(conv, container, titleSpan) {
     input.onkeydown = (ev) => {
         if (ev.key === 'Enter') input.blur();
         if (ev.key === 'Escape') {
+            // Kept from the global Escape handler, which would close the Chats modal.
+            ev.stopPropagation();
             input.value = conv.title;
             input.blur();
         }
@@ -513,7 +530,8 @@ function beginInlineRename(conv, container, titleSpan) {
             conv.isCustomName = true;
             conv.isAutoNamed = false;
         }
-        saveConversations();
+        // The renamed chat need not be the active one. An unchanged title costs no request.
+        saveConversationToBackend(conv);
         updateHeaderTitle();
         renderSidebar();
     };
@@ -673,7 +691,8 @@ function createConversationRow(conv, options = {}) {
 
     item.onclick = (e) => {
         if (e.target.closest('button') || e.target.closest('input')) return;
-        switchToConversation(conv.id);
+        const switched = switchToConversation(conv.id);
+        if (switched && options.inModal) closeChatsModal();
     };
 
     attachConvDrag(item, conv.id);
@@ -711,6 +730,8 @@ function buildFolderMenuItems(folder, anchorEl, nameSpan, leftContainer) {
                 input.onkeydown = (ev) => {
                     if (ev.key === 'Enter') input.blur();
                     if (ev.key === 'Escape') {
+                        // Kept from the global Escape handler, which would close the Chats modal.
+                        ev.stopPropagation();
                         input.value = folder.name;
                         input.blur();
                     }
@@ -869,7 +890,7 @@ function renderFolderTree(container, parentId = null, depth = 0) {
         renderFolderTree(childWrap, folder.id, depth + 1);
 
         if (childConvs.length > 0) {
-            childConvs.forEach(conv => childWrap.appendChild(createConversationRow(conv)));
+            childConvs.forEach(conv => childWrap.appendChild(createConversationRow(conv, { inModal: true })));
         } else if (childFolders.length === 0) {
             const emptyHint = document.createElement('div');
             emptyHint.className = 'text-xs text-gb-bgLight3 italic px-3 py-1';
@@ -926,42 +947,194 @@ function updateViewModeButtons() {
     }
 }
 
+function sortedByRecency() {
+    return store.conversations.slice().sort((a, b) => getConvTimestamp(b) - getConvTimestamp(a));
+}
+
+function refreshIcons(root) {
+    try {
+        lucide.createIcons({ root });
+    } catch (e) {
+        console.warn('Failed to render sidebar icons', e);
+    }
+}
+
+function buildEmptyHint(text) {
+    const empty = document.createElement('div');
+    empty.className = 'text-xs text-gb-bgLight3 italic px-3 py-6 text-center';
+    empty.textContent = text;
+    return empty;
+}
+
 function renderRecentChats(container) {
     if (store.conversations.length === 0) {
-        const empty = document.createElement('div');
-        empty.className = 'text-xs text-gb-bgLight3 italic px-3 py-6 text-center';
-        empty.textContent = 'No conversations yet';
-        container.appendChild(empty);
+        container.appendChild(buildEmptyHint('No conversations yet'));
         return;
     }
-
-    const sorted = store.conversations.slice().sort((a, b) => getConvTimestamp(b) - getConvTimestamp(a));
-    sorted.forEach(conv => {
-        container.appendChild(createConversationRow(conv, { showFolderBadge: true }));
+    sortedByRecency().forEach(conv => {
+        container.appendChild(createConversationRow(conv, { showFolderBadge: true, inModal: true }));
     });
 }
 
-export function renderSidebar() {
-    updateViewModeButtons();
+// ---------------------------------------------------------------------------
+// Compact sidebar: only the most recent chats
+// ---------------------------------------------------------------------------
+
+/** The newest chats, plus the open one when it is older than all of them. */
+function compactConversations() {
+    const recent = sortedByRecency().slice(0, SIDEBAR_RECENT_LIMIT);
+    const active = getActiveConversation();
+    if (active && recent.indexOf(active) === -1) recent.push(active);
+    return recent;
+}
+
+function buildViewAllButton(hiddenCount) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'w-full text-xs font-semibold text-gb-fgDark hover:text-gb-aquaAccent hover:bg-gb-bgLight1/40 rounded-lg px-3 py-2 flex items-center justify-center gap-1.5 transition-colors';
+    btn.title = 'Open the full chat history';
+    btn.innerHTML = '<i data-lucide="library" class="w-3.5 h-3.5"></i>';
+    const label = document.createElement('span');
+    label.textContent = `View ${hiddenCount.toLocaleString()} older chat${hiddenCount === 1 ? '' : 's'}`;
+    btn.appendChild(label);
+    btn.onclick = () => openChatsModal();
+    return btn;
+}
+
+function renderCompactSidebar() {
     const convList = document.getElementById('conv-list');
     if (!convList) return;
+    const scrollTop = convList.scrollTop;
     convList.innerHTML = '';
+
+    const rows = compactConversations();
+    if (rows.length === 0) convList.appendChild(buildEmptyHint('No conversations yet'));
+    rows.forEach(conv => convList.appendChild(createConversationRow(conv, { showFolderBadge: true })));
+
+    const hidden = store.conversations.length - rows.length;
+    if (hidden > 0) convList.appendChild(buildViewAllButton(hidden));
+
+    convList.scrollTop = scrollTop;
+    refreshIcons(convList);
+}
+
+function pluralCount(count, word) {
+    return `${count.toLocaleString()} ${word}${count === 1 ? '' : 's'}`;
+}
+
+function updateChatCounts() {
+    const total = store.conversations.length;
+    const folders = Array.isArray(store.folders) ? store.folders.length : 0;
+    const badge = document.getElementById('chats-total-badge');
+    if (badge) badge.textContent = total.toLocaleString();
+    const subtitle = document.getElementById('chats-modal-subtitle');
+    if (subtitle) subtitle.textContent = `${pluralCount(total, 'chat')} · ${pluralCount(folders, 'folder')}`;
+}
+
+// ---------------------------------------------------------------------------
+// Chats modal: the whole history, as a folder tree or a recent list
+// ---------------------------------------------------------------------------
+
+let chatsModalClearTimer = null;
+
+export function isChatsModalOpen() {
+    const modal = document.getElementById('chats-modal');
+    return Boolean(modal) && !modal.classList.contains('opacity-0');
+}
+
+function renderChatsBrowser() {
+    const container = document.getElementById('chats-modal-list');
+    if (!container) return;
+    updateViewModeButtons();
+    const scrollTop = container.scrollTop;
+    container.innerHTML = '';
+
+    // The container outlives every render, so its drop listeners are added once.
+    if (container.dataset.rootDropWired !== '1') {
+        attachRootDropTarget(container);
+        container.dataset.rootDropWired = '1';
+    }
+
+    if (store.sidebarViewMode === 'recent') {
+        renderRecentChats(container);
+    } else {
+        const folderIds = new Set(store.folders.map(f => f.id));
+        renderFolderTree(container, null, 0);
+        // Conversations with no folder, or a dangling folderId, render at root.
+        store.conversations
+            .filter(c => !c.folderId || !folderIds.has(c.folderId))
+            .forEach(conv => container.appendChild(createConversationRow(conv, { inModal: true })));
+        if (store.conversations.length === 0 && store.folders.length === 0) {
+            container.appendChild(buildEmptyHint('No conversations yet'));
+        }
+    }
+
+    container.scrollTop = scrollTop;
+    refreshIcons(container);
+}
+
+export function openChatsModal() {
+    const modal = document.getElementById('chats-modal');
+    const box = document.getElementById('chats-modal-box');
+    if (!modal || !box) return;
+    if (chatsModalClearTimer) {
+        clearTimeout(chatsModalClearTimer);
+        chatsModalClearTimer = null;
+    }
+    modal.classList.remove('opacity-0', 'pointer-events-none');
+    box.classList.remove('translate-y-8');
+    box.classList.add('translate-y-0');
+    updateChatCounts();
+    renderChatsBrowser();
+}
+
+/** Hides the modal, then drops its rows once the fade-out has finished. */
+export function closeChatsModal() {
+    const modal = document.getElementById('chats-modal');
+    const box = document.getElementById('chats-modal-box');
+    if (!modal || !box || !isChatsModalOpen()) return;
+    closePopupMenu();
+    hideFolderNameChip();
+    modal.classList.add('opacity-0', 'pointer-events-none');
+    box.classList.remove('translate-y-0');
+    box.classList.add('translate-y-8');
+
+    if (chatsModalClearTimer) clearTimeout(chatsModalClearTimer);
+    chatsModalClearTimer = setTimeout(() => {
+        chatsModalClearTimer = null;
+        if (isChatsModalOpen()) return;
+        const container = document.getElementById('chats-modal-list');
+        if (container) container.innerHTML = '';
+    }, CHATS_MODAL_CLEAR_DELAY_MS);
+}
+
+export function wireChatsModal() {
+    const bind = (id, handler) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('click', () => handler());
+    };
+    bind('open-chats-modal-btn', openChatsModal);
+    bind('close-chats-modal-btn', closeChatsModal);
+    bind('chats-modal-done-btn', closeChatsModal);
+
+    const modal = document.getElementById('chats-modal');
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeChatsModal();
+        });
+    }
+}
+
+/**
+ * Repaints the compact sidebar, and the Chats modal while it is open. The
+ * modal is never built while closed, so the page holds about a dozen rows
+ * however long the history is.
+ */
+export function renderSidebar() {
     closePopupMenu();
     // The chip is anchored to a row that is about to be discarded.
     hideFolderNameChip();
-
-    attachRootDropTarget(convList);
-
-    if (store.sidebarViewMode === 'recent') {
-        renderRecentChats(convList);
-    } else {
-        const folderIds = new Set(store.folders.map(f => f.id));
-        renderFolderTree(convList, null, 0);
-
-        // Conversations with no folder, or a dangling folderId, render at root.
-        const rootConvs = store.conversations.filter(c => !c.folderId || !folderIds.has(c.folderId));
-        rootConvs.forEach(conv => convList.appendChild(createConversationRow(conv)));
-    }
-
-    lucide.createIcons();
+    renderCompactSidebar();
+    updateChatCounts();
+    if (isChatsModalOpen()) renderChatsBrowser();
 }

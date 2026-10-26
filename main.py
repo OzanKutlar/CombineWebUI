@@ -12,6 +12,9 @@ from src.config import DEFAULT_HOST, DEFAULT_PORT, console, ensure_paths, logger
 VERBOSE_LOG_LEVEL = 4
 MIN_PORT = 1
 MAX_PORT = 65535
+# Ctrl+C stops the web server within this many seconds, even with tabs open.
+GRACEFUL_SHUTDOWN_SECONDS = 2
+INTERRUPT_EXIT_CODE = 130
 DASH = "\u2014"
 
 PROVIDER_COLUMNS = (
@@ -63,17 +66,43 @@ async def _warm_model_cache():
     logger.info(f"Available models:\n{listing}")
 
 
+def _serve(app, host, port, verbose):
+    """Runs uvicorn with a bounded graceful shutdown.
+
+    Each open browser tab holds a /v1/events stream that never ends on its own,
+    so without the bound Ctrl+C waits until every tab is closed.
+    """
+    import uvicorn
+    options = {
+        "host": host,
+        "port": port,
+        "log_level": "info" if verbose else "warning",
+        "timeout_graceful_shutdown": GRACEFUL_SHUTDOWN_SECONDS
+    }
+    try:
+        config = uvicorn.Config(app, **options)
+    except TypeError:
+        logger.warn("This uvicorn version cannot bound shutdown time, so Ctrl+C may wait for open tabs. "
+                    "Upgrade it with: pip install -U uvicorn")
+        options.pop("timeout_graceful_shutdown")
+        config = uvicorn.Config(app, **options)
+    uvicorn.Server(config).run()
+
+
 def cmd_start(args):
     _configure_logging(args.verbose)
     state.use_proxy_env = bool(args.proxy_env)
     ensure_paths()
-    asyncio.run(_warm_model_cache())
-
-    import uvicorn
-    from src.server import app
-    shown_host = "localhost" if args.host in ("0.0.0.0", "::") else args.host
-    console.print(f"\n[bold green]CombineWebUI[/bold green] is running at http://{shown_host}:{args.port}/\n")
-    uvicorn.run(app, host=args.host, port=args.port, log_level="info" if args.verbose else "warning")
+    try:
+        asyncio.run(_warm_model_cache())
+        from src.server import app
+        shown_host = "localhost" if args.host in ("0.0.0.0", "::") else args.host
+        console.print(f"\n[bold green]CombineWebUI[/bold green] is running at http://{shown_host}:{args.port}/\n")
+        _serve(app, args.host, args.port, args.verbose)
+    except KeyboardInterrupt:
+        # uvicorn handles Ctrl+C itself; this covers the model warm-up before it starts.
+        logger.debug("Interrupted before the server started")
+    console.print("[dim]CombineWebUI stopped.[/dim]")
 
 
 def _money(value, has_price, currency):
@@ -199,7 +228,13 @@ def cmd_desktop(args):
     except ImportError as e:
         logger.error(f"Desktop mode could not load ({e}). Install it with: pip install -r requirements-desktop.txt")
         sys.exit(1)
-    sys.exit(run_desktop())
+    try:
+        code = run_desktop()
+    except KeyboardInterrupt:
+        # Only reachable before the window opens; afterwards Ctrl+C closes it.
+        code = INTERRUPT_EXIT_CODE
+    console.print("[dim]CombineWebUI stopped.[/dim]")
+    sys.exit(code)
 
 
 def build_parser():

@@ -50,6 +50,12 @@ export const CHAT_STORE = 'chats_store';
 
 export const MAX_FOLDER_DEPTH = 8;
 
+// The sidebar lists only this many recent chats; the rest live in the Chats modal.
+export const SIDEBAR_RECENT_LIMIT = 10;
+
+// The closed Chats modal drops its rows after this delay, once its fade-out ends.
+export const CHATS_MODAL_CLEAR_DELAY_MS = 320;
+
 // Folders and their collapsed state persist inside the backend chats.json blob
 // alongside conversations, so no dedicated localStorage keys are required.
 

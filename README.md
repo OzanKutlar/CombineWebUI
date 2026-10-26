@@ -4,7 +4,7 @@ A self-hosted chat interface for any **OpenAI-compatible API**. CombineWebUI has
 
 ## Features
 
-- **Folders and recents.** A nested folder tree with drag and drop, plus a chronological view.
+- **Folders and recents.** The sidebar lists your 10 most recent chats. **All Chats** opens the full history as a nested folder tree with drag and drop or as a chronological list, with search (Ctrl+K).
 - **Multiple responses per turn.** Ask several models the same question and switch between their replies as tabs.
 - **Thinking traces.** Reasoning fields and inline `<think>` blocks are captured and shown in a collapsible panel. You can choose per model whether to replay them into context.
 - **Context pruning.** A drawer for removing large file blocks from earlier messages. AI-requested `PRUNE` payloads are honoured too.

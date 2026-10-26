@@ -1,7 +1,7 @@
 import { store, getFolderAncestors } from './storage.js';
 import { parseSearchQuery, testSearchMatch, extractSearchSnippets } from './searchQuery.js';
 import { parseCombineCopyPrompt } from './promptParser.js';
-import { switchToConversation } from './sidebar.js';
+import { switchToConversation, closeChatsModal } from './sidebar.js';
 import { scrollToMessage } from './chatNav.js';
 
 const MAX_DEEP_CONVS = 1000;
@@ -228,6 +228,7 @@ export function renderSearchResults() {
                 row.onclick = () => {
                     switchToConversation(hit.id);
                     closeSearchModal();
+                    closeChatsModal();
                 };
                 container.appendChild(row);
             });
@@ -265,6 +266,7 @@ export function renderSearchResults() {
                 head.onclick = () => {
                     switchToConversation(hit.id);
                     closeSearchModal();
+                    closeChatsModal();
                 };
                 card.appendChild(head);
 
@@ -293,6 +295,7 @@ export function renderSearchResults() {
                             e.stopPropagation();
                             switchToConversation(hit.id);
                             closeSearchModal();
+                            closeChatsModal();
                             setTimeout(() => {
                                 scrollToMessage(snipObj.messageIndex);
                             }, 120);
