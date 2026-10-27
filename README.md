@@ -149,6 +149,7 @@ mdatp threat list
 ## Configuration
 
 - **`settings.json`** sits in the project root. It holds endpoints, provider logos, pricing and UI preferences. It is created on first run and is **git-ignored**, because it contains API keys.
+- **Inactive endpoints.** Untick **Active** on an endpoint in Settings to switch it off without deleting it. Its URL, API key and models stay in `settings.json`, but it is not pinged on save and contributes no models to the pickers. Past usage still shows under its name in the token counter.
 - **Chat data** lives in `~/.local/share/combine-webui`. On first start, history from `~/.local/share/copilot-api` is copied over once. The original files are left untouched.
 
 ## License

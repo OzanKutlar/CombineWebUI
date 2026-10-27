@@ -142,7 +142,8 @@ def default_copilot_endpoint():
         "models": [],
         "stream": True,
         "prune_policy": "deferred",
-        "cache_ttl_seconds": 300
+        "cache_ttl_seconds": 300,
+        "enabled": True
     }
 
 

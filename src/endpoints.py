@@ -107,11 +107,22 @@ async def fetch_endpoint_models(endpoint):
     return models
 
 
+def is_endpoint_enabled(endpoint):
+    """Endpoints are active unless explicitly switched off, so older settings keep working."""
+    return isinstance(endpoint, dict) and endpoint.get("enabled", True) is not False
+
+
 def _configured_endpoints():
+    """Active endpoints with a URL. Inactive ones keep their settings but are never contacted."""
     endpoints = load_settings().get("custom_endpoints", [])
     if not isinstance(endpoints, list):
         return []
-    return [ep for ep in endpoints[:MAX_ENDPOINTS] if isinstance(ep, dict) and _base_url(ep)]
+    usable = [ep for ep in endpoints[:MAX_ENDPOINTS] if isinstance(ep, dict) and _base_url(ep)]
+    active = [ep for ep in usable if is_endpoint_enabled(ep)]
+    skipped = len(usable) - len(active)
+    if skipped:
+        logger.info(f"Skipping {skipped} inactive endpoint(s)")
+    return active
 
 
 def _assign_public_ids(models):

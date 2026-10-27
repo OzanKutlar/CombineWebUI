@@ -87,6 +87,25 @@ function normalizeEndpointCacheFields(ep) {
     ep.cache_ttl_seconds = clampCacheTtl(ep.cache_ttl_seconds);
 }
 
+/** Endpoints are active unless explicitly switched off, matching the backend. */
+function normalizeEndpointActiveField(ep) {
+    if (!ep || typeof ep !== 'object') return;
+    ep.enabled = ep.enabled !== false;
+}
+
+/**
+ * Dims an inactive card and shows its badge. The row itself runs a fade-in
+ * animation that pins its opacity, so the children are dimmed instead.
+ */
+function applyEndpointActiveState(row, isActive) {
+    if (!row) return;
+    const inactive = isActive === false;
+    row.classList.toggle('border-dashed', inactive);
+    Array.from(row.children).forEach(child => child.classList.toggle('opacity-60', inactive));
+    const badge = row.querySelector('.ep-inactive-badge');
+    if (badge) badge.classList.toggle('hidden', !inactive);
+}
+
 function renderSettingsEndpoints() {
     const list = document.getElementById('endpoints-list');
     if (!list) return;
@@ -97,11 +116,12 @@ function renderSettingsEndpoints() {
         const row = document.createElement('div');
         row.className = 'flex flex-col gap-3 bg-gb-bgDarkest p-4 rounded-lg border border-gb-bgLight2 relative animate-fade-in-up transition-all duration-300 transform origin-top';
         row.style.animationDelay = `${i * 0.05}s`;
+        row.setAttribute('data-ep-row', String(i));
         row.innerHTML = `
             <div class="flex flex-col xl:flex-row gap-3 w-full items-start xl:items-end">
                 <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 flex-1 w-full min-w-0">
                     <div class="min-w-0">
-                        <label class="text-xs text-gb-fgDark font-semibold uppercase">Name</label>
+                        <label class="text-xs text-gb-fgDark font-semibold uppercase flex items-center gap-1.5">Name <span class="ep-inactive-badge hidden normal-case font-bold text-[10px] px-1.5 py-0.5 rounded bg-gb-bgLight2 text-gb-fgDark border border-gb-bgLight3">Inactive</span></label>
                         <input type="text" class="w-full bg-gb-bg border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-2 py-1 mt-1" placeholder="Local vLLM" data-idx="${i}" data-field="name">
                     </div>
                     <div class="min-w-0">
@@ -118,6 +138,10 @@ function renderSettingsEndpoints() {
                     </div>
                 </div>
                 <div class="flex items-center gap-2 shrink-0 self-end xl:self-auto pb-0.5">
+                    <label class="flex items-center gap-1.5 text-xs font-semibold text-gb-fgLight cursor-pointer select-none whitespace-nowrap" title="Active endpoints are pinged on save and supply models. Inactive ones keep their URL, key and models but are ignored until switched back on.">
+                        <input type="checkbox" class="w-4 h-4 rounded border-gb-bgLight2 bg-gb-bgDarkest text-gb-blueAccent focus:ring-gb-blueAccent cursor-pointer" data-idx="${i}" data-field="enabled">
+                        Active
+                    </label>
                     <label class="flex items-center gap-1.5 text-xs font-semibold text-gb-fgLight cursor-pointer select-none whitespace-nowrap" title="Stream replies token-by-token in this web UI. When off, the chat page waits for the full response. Does not affect external API clients.">
                         <input type="checkbox" class="w-4 h-4 rounded border-gb-bgLight2 bg-gb-bgDarkest text-gb-blueAccent focus:ring-gb-blueAccent cursor-pointer" data-idx="${i}" data-field="stream">
                         Stream
@@ -163,6 +187,9 @@ function renderSettingsEndpoints() {
         row.querySelector('[data-field="logo"]').value = ep.logo || '';
         ep.stream = ep.stream !== false;
         row.querySelector('[data-field="stream"]').checked = ep.stream;
+        normalizeEndpointActiveField(ep);
+        row.querySelector('[data-field="enabled"]').checked = ep.enabled;
+        applyEndpointActiveState(row, ep.enabled);
         normalizeEndpointCacheFields(ep);
         row.querySelector('[data-field="prune_policy"]').value = ep.prune_policy;
         row.querySelector('[data-field="cache_ttl_seconds"]').value = String(ep.cache_ttl_seconds);
@@ -296,6 +323,8 @@ function renderSettingsEndpoints() {
         if (inp.type === 'checkbox') {
             inp.onchange = (e) => {
                 ep[field] = e.target.checked;
+                // Repainted in place, so text typed into the card is never lost.
+                if (field === 'enabled') applyEndpointActiveState(inp.closest('[data-ep-row]'), ep.enabled);
             };
             return;
         }
@@ -642,6 +671,7 @@ export function addEndpoint() {
         api_key: '',
         logo: '',
         models: [],
+        enabled: true,
         stream: true,
         prune_policy: PRUNE_POLICY_DEFERRED,
         cache_ttl_seconds: clampCacheTtl(null)
@@ -672,6 +702,10 @@ export async function saveSettings() {
         }
     }
     endpoints.forEach(normalizeEndpointCacheFields);
+    endpoints.forEach(normalizeEndpointActiveField);
+    // Inactive endpoints are saved with everything else but never pinged.
+    const activeEndpoints = endpoints.filter(ep => ep.enabled !== false);
+    const skippedCount = endpoints.length - activeEndpoints.length;
 
     // Reasoning budgets are configured in copilot-api's own settings.json.
     delete currentSettings.thinking_defaults;
@@ -703,10 +737,10 @@ export async function saveSettings() {
     themeAtOpen = pendingTheme;
 
     closeSettingsModal();
-    openSaveProgressModal(endpoints);
+    openSaveProgressModal(activeEndpoints, { skippedCount });
 
     let hasErrors = false;
-    const providerPromises = endpoints.map((ep, idx) => {
+    const providerPromises = activeEndpoints.map((ep, idx) => {
         return new Promise(async (resolve) => {
             let currentTimeout = 0.5;
             let retryCount = 0;

@@ -1,7 +1,13 @@
 let autoCloseTimer = null;
 let isFinished = false;
 
-export function openSaveProgressModal(providers) {
+/**
+ * `providers` are the endpoints that will actually be probed. `options.skippedCount`
+ * is how many inactive endpoints were left out, shown as one dimmed row.
+ */
+export function openSaveProgressModal(providers, options) {
+    const rawSkipped = options ? Number(options.skippedCount) : 0;
+    const skippedCount = Number.isInteger(rawSkipped) && rawSkipped > 0 ? rawSkipped : 0;
     clearAutoCloseTimer();
     isFinished = false;
 
@@ -27,7 +33,7 @@ export function openSaveProgressModal(providers) {
     if (eps.length === 0) {
         const noEps = document.createElement('div');
         noEps.className = 'text-xs text-gb-fgDark italic py-1';
-        noEps.textContent = 'No custom endpoint providers configured.';
+        noEps.textContent = 'No active endpoint providers configured.';
         container.appendChild(noEps);
     } else {
         eps.forEach((ep, idx) => {
@@ -50,6 +56,14 @@ export function openSaveProgressModal(providers) {
             `;
             container.appendChild(row);
         });
+    }
+
+    if (skippedCount > 0) {
+        const skippedRow = document.createElement('div');
+        skippedRow.className = 'flex items-center gap-3 p-3 rounded-lg bg-gb-bgDarkest border border-dashed border-gb-bgLight2 opacity-60';
+        skippedRow.innerHTML = '<i data-lucide="power-off" class="w-4 h-4 text-gb-fgDark shrink-0"></i><span class="text-xs font-mono text-gb-fgDark"></span>';
+        skippedRow.querySelector('span').textContent = `${skippedCount} inactive endpoint${skippedCount === 1 ? '' : 's'} skipped`;
+        container.appendChild(skippedRow);
     }
 
     // 2. Render Models checking item

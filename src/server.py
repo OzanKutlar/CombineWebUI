@@ -20,7 +20,7 @@ from src.config import (
     save_settings,
     state
 )
-from src.endpoints import cache_models, create_chat_completions, is_metered
+from src.endpoints import cache_models, create_chat_completions, is_endpoint_enabled, is_metered
 from src.events import broadcast_event, event_broadcaster
 from src.history import (
     delete_conversation,
@@ -126,7 +126,8 @@ def _merged_providers(settings):
     """Configured picture groups plus one group per endpoint, logos resolved."""
     providers = [dict(p) for p in _as_list(settings.get("providers")) if isinstance(p, dict)]
     for endpoint in _as_list(settings.get("custom_endpoints")):
-        if not isinstance(endpoint, dict) or not endpoint.get("name"):
+        # Inactive endpoints supply no models, so they get no picture group either.
+        if not is_endpoint_enabled(endpoint) or not endpoint.get("name"):
             continue
         name = endpoint["name"]
         logo = endpoint.get("logo", "")
