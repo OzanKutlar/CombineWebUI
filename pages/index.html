@@ -41,6 +41,7 @@
     <script>window.DOMPurify || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"><\/script>');</script>
     <link rel="stylesheet" href="/static/css/themes.css">
     <link rel="stylesheet" href="/static/css/theme.css">
+    <link rel="stylesheet" href="/static/css/settings.css">
     <script>
         tailwind.config = {
             theme: {
@@ -328,11 +329,11 @@
                     <section class="settings-panel settings-panel-active" data-panel="endpoints">
                         <div class="px-6 pt-6 pb-3 shrink-0 border-b border-gb-bgLight2">
                             <h3 class="text-md font-bold text-gb-fgLightest">OpenAI-Compatible Endpoints</h3>
-                            <p class="text-xs text-gb-fgDark mt-1.5 leading-relaxed">Every model in the picker comes from one of these servers (e.g. copilot-api, Ollama, vLLM, LM Studio). Models whose endpoint reports a premium multiplier are treated as metered. Untick Active to switch an endpoint off without deleting it: it keeps its key and settings, but is not pinged and supplies no models.</p>
+                            <p class="text-xs text-gb-fgDark mt-1.5 leading-relaxed">Every model in the picker comes from one of these servers. Click a card to edit it, or switch it off to keep its settings without using it.</p>
                         </div>
                         <div class="px-6 py-5 overflow-y-auto scrollbar-hide flex-1">
-                            <div id="endpoints-list" class="flex flex-col gap-4"></div>
-                            <button id="add-endpoint-btn" class="mt-4 bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-fgLight text-sm font-semibold py-2 px-4 rounded border border-gb-bgLight3 transition-colors flex items-center gap-2">
+                            <div id="endpoints-list" class="flex flex-col gap-3"></div>
+                            <button id="add-endpoint-btn" type="button" class="ep-add-btn">
                                 <i data-lucide="plus" class="w-4 h-4"></i> Add Endpoint
                             </button>
                         </div>
@@ -356,7 +357,7 @@
                                     <h4 class="text-sm font-bold text-gb-fgLightest">Agent Identity</h4>
                                     <div>
                                         <label class="text-xs text-gb-fgDark font-semibold uppercase" for="setting-identity-mode">Identity Sent To Models</label>
-                                        <select id="setting-identity-mode" class="w-full bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-3 py-2 mt-1">
+                                        <select id="setting-identity-mode" class="form-input mt-1.5">
                                             <option value="auto">Auto (match the target model)</option>
                                             <option value="neutral">Neutral (no vendor or model name)</option>
                                             <option value="claude">Claude (Anthropic)</option>
@@ -369,7 +370,7 @@
                                     </div>
                                     <div id="setting-identity-custom-wrap" class="hidden">
                                         <label class="text-xs text-gb-fgDark font-semibold uppercase" for="setting-identity-custom">Custom Identity</label>
-                                        <input type="text" id="setting-identity-custom" maxlength="500" class="w-full bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-3 py-2 mt-1" placeholder="DeepSeek, or a full sentence starting with You are">
+                                        <input type="text" id="setting-identity-custom" maxlength="500" class="form-input mt-1.5" placeholder="DeepSeek, or a full sentence starting with You are">
                                     </div>
                                     <div class="flex items-center gap-2">
                                         <input type="checkbox" id="setting-identity-override" class="w-4 h-4 rounded border-gb-bgLight2 bg-gb-bgDarkest text-gb-blueAccent focus:ring-gb-blueAccent cursor-pointer">
@@ -390,7 +391,7 @@
                                     </div>
                                     <div class="border-t border-gb-bgLight2 pt-4 mt-1">
                                         <label class="text-xs text-gb-fgDark font-semibold uppercase">Inline Thinking Tags (comma separated)</label>
-                                        <input type="text" id="setting-thinking-tags" class="w-full bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-3 py-2 mt-1" placeholder="think, thinking, reasoning">
+                                        <input type="text" id="setting-thinking-tags" class="form-input form-input-mono mt-1.5" placeholder="think, thinking, reasoning">
                                         <p class="text-xs text-gb-fgDark mt-2 leading-relaxed">Tags are only recognised at the start of a line and are ignored inside code blocks. Leave this empty to disable inline parsing entirely and keep every tag as visible text.</p>
                                     </div>
                                 </div>
@@ -405,8 +406,8 @@
                             <p class="text-xs text-gb-fgDark mt-1.5 leading-relaxed">Organize models in the Model Matrix and assign chat reply avatars by matching keywords to model pictures. Supports image URLs, local SVG paths, and raw pasted SVG markup.</p>
                         </div>
                         <div class="px-6 py-5 overflow-y-auto scrollbar-hide flex-1">
-                            <div id="provider-groups-list" class="flex flex-col gap-4"></div>
-                            <button id="add-provider-group-btn" class="mt-4 bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-fgLight text-sm font-semibold py-2 px-4 rounded border border-gb-bgLight3 transition-colors flex items-center gap-2">
+                            <div id="provider-groups-list" class="flex flex-col gap-3"></div>
+                            <button id="add-provider-group-btn" type="button" class="ep-add-btn">
                                 <i data-lucide="plus" class="w-4 h-4"></i> Add Picture Group
                             </button>
                         </div>
@@ -420,7 +421,7 @@
                         <div class="px-6 py-5 overflow-y-auto scrollbar-hide flex-1">
                             <div class="max-w-md">
                                 <label class="text-xs text-gb-fgDark font-semibold uppercase">Non-Streaming Timeout (seconds)</label>
-                                <input type="number" id="setting-non-stream-timeout" class="w-full bg-gb-bgDarkest border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-3 py-2 mt-1" min="5" placeholder="240">
+                                <input type="number" id="setting-non-stream-timeout" class="form-input form-input-mono mt-1.5" min="5" placeholder="240">
                                 <p class="text-xs text-gb-fgDark mt-2 leading-relaxed">Maximum time in seconds to wait for a response when streaming is disabled (default: 240s).</p>
                             </div>
                         </div>

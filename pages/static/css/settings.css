@@ -1,0 +1,743 @@
+/* Settings dialog components: shared form controls plus the endpoint and
+   provider cards.
+
+   Same rule as theme.css: every colour resolves through a token defined in
+   themes.css, never a raw hex literal, so all three themes render correctly. */
+
+/* Native checkboxes would otherwise use the browser's default (often red)
+   accent, because no Tailwind forms plugin is loaded. */
+input[type="checkbox"],
+input[type="radio"] {
+    accent-color: rgb(var(--gb-blue-accent));
+}
+
+/* ------------------------------------------------------------------ */
+/* Form controls                                                       */
+/* ------------------------------------------------------------------ */
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 16px;
+}
+
+.form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.form-field-wide {
+    grid-column: 1 / -1;
+}
+
+.form-label {
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: rgb(var(--gb-fg-medium));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.form-hint {
+    font-size: 11px;
+    line-height: 1.45;
+    color: rgb(var(--gb-fg-dark));
+}
+
+.form-input {
+    width: 100%;
+    min-width: 0;
+    height: 36px;
+    padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid rgb(var(--gb-bg-light-2));
+    background: rgb(var(--gb-bg-darkest));
+    color: rgb(var(--gb-fg-light));
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.form-input::placeholder {
+    color: rgb(var(--gb-bg-light-3));
+}
+
+.form-input:hover {
+    border-color: rgb(var(--gb-bg-light-3));
+}
+
+.form-input:focus {
+    border-color: rgb(var(--gb-blue-accent));
+    box-shadow: 0 0 0 3px rgb(var(--gb-blue-accent) / 0.18);
+}
+
+.form-input-mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+}
+
+textarea.form-input {
+    height: auto;
+    min-height: 96px;
+    padding: 8px 12px;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+select.form-input {
+    padding-right: 32px;
+    cursor: pointer;
+}
+
+.form-input-invalid,
+.form-input-invalid:hover,
+.form-input-invalid:focus {
+    border-color: rgb(var(--gb-red-accent));
+    box-shadow: 0 0 0 3px rgb(var(--gb-red-accent) / 0.18);
+}
+
+/* An input with an icon button inside its right edge (show / hide key). */
+.form-input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.form-input-wrap .form-input {
+    padding-right: 40px;
+}
+
+.form-input-btn {
+    position: absolute;
+    right: 4px;
+    width: 30px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: rgb(var(--gb-fg-dark));
+    cursor: pointer;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.form-input-btn:hover {
+    color: rgb(var(--gb-fg-lightest));
+    background: rgb(var(--gb-bg-light-1));
+}
+
+.form-input-btn svg {
+    width: 15px;
+    height: 15px;
+}
+
+/* Pill toggle. The real checkbox stays in the DOM for keyboard and forms. */
+.switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    cursor: pointer;
+    user-select: none;
+    font-size: 12px;
+    font-weight: 600;
+    color: rgb(var(--gb-fg-light));
+    white-space: nowrap;
+}
+
+.switch-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.switch-track {
+    position: relative;
+    width: 34px;
+    height: 20px;
+    flex-shrink: 0;
+    border-radius: 9999px;
+    border: 1px solid rgb(var(--gb-bg-light-3));
+    background: rgb(var(--gb-bg-light-2));
+    transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.switch-track::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 9999px;
+    background: rgb(var(--gb-fg-medium));
+    transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.18s ease;
+}
+
+.switch:hover .switch-track {
+    border-color: rgb(var(--gb-fg-dark));
+}
+
+.switch-input:checked + .switch-track {
+    border-color: rgb(var(--gb-green-accent));
+    background: rgb(var(--gb-green-accent) / 0.3);
+}
+
+.switch-input:checked + .switch-track::after {
+    transform: translateX(14px);
+    background: rgb(var(--gb-green-accent));
+}
+
+.switch-input:focus-visible + .switch-track {
+    box-shadow: 0 0 0 3px rgb(var(--gb-blue-accent) / 0.35);
+}
+
+/* Two or three mutually exclusive options. */
+.segmented {
+    display: inline-flex;
+    align-self: flex-start;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 9px;
+    border: 1px solid rgb(var(--gb-bg-light-2));
+    background: rgb(var(--gb-bg-darkest));
+}
+
+.segmented-btn {
+    padding: 5px 12px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: rgb(var(--gb-fg-dark));
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.segmented-btn:hover {
+    color: rgb(var(--gb-fg-light));
+}
+
+.segmented-btn-active,
+.segmented-btn-active:hover {
+    color: rgb(var(--gb-fg-lightest));
+    background: rgb(var(--gb-bg-light-1));
+    box-shadow: inset 0 0 0 1px rgb(var(--gb-bg-light-3));
+}
+
+.segmented-btn:focus-visible {
+    outline: 2px solid rgb(var(--gb-blue-accent));
+    outline-offset: 1px;
+}
+
+.btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex-shrink: 0;
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 8px;
+    border: 1px solid rgb(var(--gb-bg-light-3));
+    background: rgb(var(--gb-bg-light-1));
+    color: rgb(var(--gb-fg-light));
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.btn-secondary:hover {
+    background: rgb(var(--gb-bg-light-2));
+    color: rgb(var(--gb-fg-lightest));
+}
+
+.btn-secondary:active {
+    transform: scale(0.97);
+}
+
+.btn-secondary svg {
+    width: 14px;
+    height: 14px;
+    color: rgb(var(--gb-aqua-accent));
+}
+
+/* ------------------------------------------------------------------ */
+/* Cards (endpoints and provider groups)                               */
+/* ------------------------------------------------------------------ */
+
+.ep-card {
+    border: 1px solid rgb(var(--gb-bg-light-2));
+    border-radius: 12px;
+    background: rgb(var(--gb-bg-darkest));
+    transition: border-color 0.2s ease, opacity 0.25s ease, transform 0.25s ease;
+}
+
+.ep-card:hover,
+.ep-card-open {
+    border-color: rgb(var(--gb-bg-light-3));
+}
+
+.ep-card-removing {
+    opacity: 0;
+    transform: scale(0.98) translateY(-4px);
+    pointer-events: none;
+}
+
+.ep-card-inactive {
+    border-style: dashed;
+}
+
+/* The card itself runs a fade-in animation that pins its opacity, so the
+   inactive dim is applied to its parts. The actions stay at full contrast
+   so the Active switch is easy to find. */
+.ep-card-inactive .ep-card-head-main,
+.ep-card-inactive .ep-card-body {
+    opacity: 0.55;
+}
+
+.ep-card-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    cursor: pointer;
+}
+
+.ep-card-head-main {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+    transition: opacity 0.2s ease;
+}
+
+.ep-card-logo {
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 10px;
+    border: 1px solid rgb(var(--gb-bg-light-2));
+    background: rgb(var(--gb-fg-light) / 0.08);
+    color: rgb(var(--gb-fg-dark));
+}
+
+.ep-card-logo img {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+}
+
+.ep-card-logo svg {
+    width: 18px;
+    height: 18px;
+}
+
+.ep-card-titles {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.ep-card-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.ep-card-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: rgb(var(--gb-fg-lightest));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ep-card-sub {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    color: rgb(var(--gb-fg-dark));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ep-badge {
+    display: none;
+    flex-shrink: 0;
+    padding: 1px 7px;
+    border-radius: 9999px;
+    border: 1px solid rgb(var(--gb-bg-light-3));
+    background: rgb(var(--gb-bg-light-1));
+    color: rgb(var(--gb-fg-dark));
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.ep-card-inactive .ep-badge {
+    display: inline-flex;
+}
+
+.ep-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.ep-icon-btn {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: rgb(var(--gb-fg-dark));
+    cursor: pointer;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.ep-icon-btn:hover {
+    color: rgb(var(--gb-fg-lightest));
+    background: rgb(var(--gb-bg-light-1));
+}
+
+.ep-icon-btn:focus-visible {
+    outline: 2px solid rgb(var(--gb-blue-accent));
+    outline-offset: 1px;
+}
+
+.ep-icon-btn:disabled {
+    opacity: 0.5;
+    cursor: wait;
+}
+
+.ep-icon-btn-danger:hover {
+    color: rgb(var(--gb-red-accent));
+}
+
+.ep-icon-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.ep-chevron svg {
+    transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ep-card-open .ep-chevron svg {
+    transform: rotate(180deg);
+}
+
+/* Same grid-template-rows technique as the sidebar folder tree: animates to
+   the true content height without a hardcoded max-height. */
+.ep-card-body {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.24s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
+}
+
+.ep-card-open .ep-card-body {
+    grid-template-rows: 1fr;
+}
+
+.ep-card-body-inner {
+    overflow: hidden;
+    min-height: 0;
+}
+
+.ep-card-content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 16px 14px 18px;
+    border-top: 1px solid rgb(var(--gb-bg-light-2));
+}
+
+.ep-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ep-section-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgb(var(--gb-aqua-accent));
+}
+
+.ep-section-title svg {
+    width: 13px;
+    height: 13px;
+}
+
+.ep-field-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.ep-switch-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 14px;
+}
+
+/* Status chip next to the Check button. Idle (never checked) shows nothing. */
+.ep-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 9px;
+    border-radius: 9999px;
+    border: 1px solid rgb(var(--gb-bg-light-2));
+    background: rgb(var(--gb-bg));
+    color: rgb(var(--gb-fg-dark));
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.ep-status-idle {
+    display: none;
+}
+
+.ep-status-dot {
+    width: 7px;
+    height: 7px;
+    flex-shrink: 0;
+    border-radius: 9999px;
+    background: rgb(var(--gb-bg-light-3));
+}
+
+.ep-status-checking .ep-status-dot {
+    background: rgb(var(--gb-blue-accent));
+    animation: ep-status-pulse 1s ease-in-out infinite;
+}
+
+.ep-status-ok {
+    color: rgb(var(--gb-green-accent));
+    border-color: rgb(var(--gb-green-accent) / 0.35);
+}
+
+.ep-status-ok .ep-status-dot {
+    background: rgb(var(--gb-green-accent));
+}
+
+.ep-status-slow {
+    color: rgb(var(--gb-yellow-accent));
+    border-color: rgb(var(--gb-yellow-accent) / 0.35);
+}
+
+.ep-status-slow .ep-status-dot {
+    background: rgb(var(--gb-yellow-accent));
+}
+
+.ep-status-fail {
+    color: rgb(var(--gb-red-accent));
+    border-color: rgb(var(--gb-red-accent) / 0.35);
+}
+
+.ep-status-fail .ep-status-dot {
+    background: rgb(var(--gb-red-accent));
+}
+
+@keyframes ep-status-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+/* Pinned model pills */
+.ep-model-add {
+    display: flex;
+    gap: 8px;
+}
+
+.ep-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.ep-pills-empty {
+    display: none;
+}
+
+.ep-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    padding: 3px 4px 3px 10px;
+    border-radius: 9999px;
+    border: 1px solid rgb(var(--gb-bg-light-3));
+    background: rgb(var(--gb-bg));
+    color: rgb(var(--gb-fg-light));
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+}
+
+.ep-pill-label {
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ep-pill-remove {
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 9999px;
+    background: transparent;
+    color: rgb(var(--gb-fg-dark));
+    cursor: pointer;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.ep-pill-remove:hover {
+    color: rgb(var(--gb-red-accent));
+    background: rgb(var(--gb-bg-light-1));
+}
+
+.ep-pill-remove svg {
+    width: 12px;
+    height: 12px;
+}
+
+/* Empty list and add buttons */
+.ep-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 28px 16px;
+    border: 1px dashed rgb(var(--gb-bg-light-2));
+    border-radius: 12px;
+    color: rgb(var(--gb-fg-dark));
+    text-align: center;
+}
+
+.ep-empty svg {
+    width: 28px;
+    height: 28px;
+    margin-bottom: 4px;
+    opacity: 0.6;
+}
+
+.ep-empty-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: rgb(var(--gb-fg-light));
+}
+
+.ep-add-btn {
+    width: 100%;
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px dashed rgb(var(--gb-bg-light-3));
+    background: transparent;
+    color: rgb(var(--gb-fg-dark));
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.ep-add-btn:hover {
+    color: rgb(var(--gb-blue-accent));
+    border-color: rgb(var(--gb-blue-accent));
+    background: rgb(var(--gb-blue-accent) / 0.08);
+}
+
+.ep-add-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Narrow screens and reduced motion                                   */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 767px) {
+    .form-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 640px) {
+    .ep-card-head {
+        flex-wrap: wrap;
+    }
+
+    .ep-card-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .switch-track,
+    .switch-track::after,
+    .segmented-btn,
+    .form-input,
+    .ep-card,
+    .ep-card-body,
+    .ep-chevron svg,
+    .ep-add-btn {
+        transition: none !important;
+    }
+
+    .ep-status-checking .ep-status-dot {
+        animation: none !important;
+    }
+}

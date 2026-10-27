@@ -1,5 +1,18 @@
+/**
+ * Settings dialog: endpoint and provider cards, display preferences, network
+ * options, and the save-and-verify flow.
+ *
+ * Cards are built from DOM nodes rather than an HTML template, so user values
+ * are only ever assigned as text or input values, and each card repaints its
+ * own header as fields change without re-rendering the list.
+ */
 import { fetchModels } from './models.js';
-import { PRUNE_POLICY_DEFERRED, PRUNE_POLICY_IMMEDIATE } from './config.js';
+import {
+    PRUNE_POLICY_DEFERRED,
+    PRUNE_POLICY_IMMEDIATE,
+    MIN_CACHE_TTL_SECONDS,
+    MAX_CACHE_TTL_SECONDS
+} from './config.js';
 import { clampCacheTtl } from './pruneCache.js';
 import { wireModalTabs } from './modalTabs.js';
 import { store, persistThinkingPrefs, persistTheme, persistIdentityPrefs, sanitizeIdentityPrefs } from './storage.js';
@@ -13,7 +26,6 @@ import {
 } from './saveProgress.js';
 
 let currentSettings = {};
-let groupPreviewTimers = {};
 
 // Theme selection is previewed live, so the value the dialog was opened with
 // is retained in order to revert on Cancel. `pendingTheme` is what Save
@@ -27,6 +39,24 @@ const DEFAULT_SETTINGS_PANEL = 'endpoints';
 
 let activePanel = DEFAULT_SETTINGS_PANEL;
 let switchPanelFn = null;
+
+// Card UI state, keyed by the settings objects themselves. Those are refetched
+// on every open, so none of this outlives a dialog session or reaches disk.
+const expandedCards = new WeakSet();
+const checkResults = new WeakMap();
+const endpointFields = new WeakMap();
+
+const SLOW_LATENCY_MS = 1000;
+const MANUAL_CHECK_TIMEOUT_SECONDS = 5;
+const LOGO_PREVIEW_DEBOUNCE_MS = 200;
+const CARD_REMOVE_MS = 260;
+const MAX_ANIMATED_CARDS = 10;
+const MAX_MODEL_ID_CHARS = 300;
+const MAX_PINNED_MODELS = 2000;
+const INVALID_CLASS = 'form-input-invalid';
+const DEFAULT_SVG_LOGO = '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>';
+
+let fieldIdCounter = 0;
 
 /**
  * One delegated listener for the whole rail, installed once by the shared
@@ -57,6 +87,185 @@ export function switchSettingsPanel(panelId) {
     if (switchPanelFn) switchPanelFn(panelId);
 }
 
+// ---------------------------------------------------------------------------
+// DOM helpers
+// ---------------------------------------------------------------------------
+
+function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (typeof text === 'string') node.textContent = text;
+    return node;
+}
+
+function icon(name) {
+    const node = document.createElement('i');
+    node.setAttribute('data-lucide', name);
+    return node;
+}
+
+function refreshIcons(root) {
+    try {
+        if (root) lucide.createIcons({ root });
+        else lucide.createIcons();
+    } catch (e) {
+        console.warn('Failed to render settings icons', e);
+    }
+}
+
+function plural(count, word) {
+    return `${count} ${word}${count === 1 ? '' : 's'}`;
+}
+
+function buildIconButton(iconName, title, onClick, danger) {
+    const btn = el('button', 'ep-icon-btn' + (danger ? ' ep-icon-btn-danger' : ''));
+    btn.type = 'button';
+    btn.title = title;
+    btn.setAttribute('aria-label', title);
+    btn.appendChild(icon(iconName));
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onClick(btn);
+    });
+    return btn;
+}
+
+function buildInput(value, options) {
+    const opts = options || {};
+    const multiline = opts.multiline === true;
+    const input = el(multiline ? 'textarea' : 'input', 'form-input' + (opts.mono ? ' form-input-mono' : ''));
+    if (!multiline) input.type = opts.type || 'text';
+    if (opts.placeholder) input.placeholder = opts.placeholder;
+    ['min', 'max', 'step'].forEach(attr => {
+        if (opts[attr] !== undefined) input.setAttribute(attr, String(opts[attr]));
+    });
+    input.value = (value === undefined || value === null) ? '' : String(value);
+    input.spellcheck = false;
+    input.setAttribute('autocomplete', opts.type === 'password' ? 'new-password' : 'off');
+    if (typeof opts.onInput === 'function') {
+        input.addEventListener('input', () => opts.onInput(input.value, input));
+    }
+    return input;
+}
+
+/**
+ * A labelled field. The label is a real <label for> when the control holds an
+ * input, and plain text otherwise, so clicking a caption never activates the
+ * first button of a segmented control.
+ */
+function buildField(labelText, control, options) {
+    const opts = options || {};
+    const field = el('div', 'form-field' + (opts.wide ? ' form-field-wide' : ''));
+    const target = control.matches('input, textarea, select')
+        ? control
+        : control.querySelector('input, textarea, select');
+
+    let label;
+    if (target) {
+        if (!target.id) {
+            fieldIdCounter += 1;
+            target.id = 'settings-field-' + fieldIdCounter;
+        }
+        label = el('label', 'form-label', labelText);
+        label.htmlFor = target.id;
+    } else {
+        label = el('span', 'form-label', labelText);
+    }
+
+    field.append(label, control);
+    if (opts.hint) field.appendChild(el('span', 'form-hint', opts.hint));
+    return field;
+}
+
+function buildSwitch(labelText, checked, onChange, title) {
+    const wrap = el('label', 'switch');
+    if (title) wrap.title = title;
+    const input = el('input', 'switch-input');
+    input.type = 'checkbox';
+    input.checked = checked === true;
+    input.addEventListener('change', () => onChange(input.checked));
+    wrap.append(input, el('span', 'switch-track'));
+    if (labelText) wrap.appendChild(el('span', 'switch-label', labelText));
+    // Keeps a click on the switch from also toggling the card it sits in.
+    wrap.addEventListener('click', (e) => e.stopPropagation());
+    return wrap;
+}
+
+function buildSegmented(choices, current, onChange) {
+    const group = el('div', 'segmented');
+    group.setAttribute('role', 'radiogroup');
+
+    const buttons = choices.map(choice => {
+        const btn = el('button', 'segmented-btn', choice.label);
+        btn.type = 'button';
+        btn.setAttribute('role', 'radio');
+        if (choice.title) btn.title = choice.title;
+        btn.addEventListener('click', () => {
+            select(choice.value);
+            onChange(choice.value);
+        });
+        group.appendChild(btn);
+        return { btn, value: choice.value };
+    });
+
+    function select(value) {
+        buttons.forEach(entry => {
+            const on = entry.value === value;
+            entry.btn.classList.toggle('segmented-btn-active', on);
+            entry.btn.setAttribute('aria-checked', on ? 'true' : 'false');
+        });
+    }
+
+    select(current);
+    return group;
+}
+
+function buildSection(title, iconName, children) {
+    const section = el('section', 'ep-section');
+    const head = el('div', 'ep-section-title');
+    head.append(icon(iconName), el('span', '', title));
+    section.appendChild(head);
+    children.forEach(child => section.appendChild(child));
+    return section;
+}
+
+function buildEmptyState(iconName, title, text) {
+    const box = el('div', 'ep-empty');
+    box.append(icon(iconName), el('p', 'ep-empty-title', title), el('p', 'form-hint', text));
+    return box;
+}
+
+function clearInvalid(input) {
+    input.classList.remove(INVALID_CLASS);
+    input.removeAttribute('aria-invalid');
+}
+
+// ---------------------------------------------------------------------------
+// Card shell, shared by endpoints and provider groups
+// ---------------------------------------------------------------------------
+
+function buildCardShell(index) {
+    const card = el('div', 'ep-card animate-fade-in-up');
+    card.style.animationDelay = `${Math.min(index, MAX_ANIMATED_CARDS) * 0.04}s`;
+    return card;
+}
+
+function setCardOpen(card, key, open) {
+    card.classList.toggle('ep-card-open', open);
+    if (open) expandedCards.add(key);
+    else expandedCards.delete(key);
+
+    const toggle = card.querySelector('.ep-chevron');
+    if (!toggle) return;
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    toggle.title = open ? 'Hide details' : 'Show details';
+    toggle.setAttribute('aria-label', toggle.title);
+}
+
+function toggleCard(card, key) {
+    setCardOpen(card, key, !card.classList.contains('ep-card-open'));
+}
+
 async function resolveLogoPreview(val) {
     if (!val || !val.trim()) return '';
     const s = val.trim();
@@ -76,9 +285,123 @@ async function resolveLogoPreview(val) {
             const d = await res.json();
             return d.resolved || s;
         }
-    } catch (e) {}
+    } catch (e) {
+        console.warn('Could not resolve the logo preview', e);
+    }
     return s;
 }
+
+/**
+ * Returns an updater that shows `value` as a logo inside `box`, debounced and
+ * guarded so a slow lookup can never overwrite a newer one.
+ */
+function createLogoPreview(box, fallbackIcon) {
+    let lastValue = null;
+    let timer = null;
+    let generation = 0;
+
+    const showFallback = () => {
+        box.innerHTML = '';
+        box.appendChild(icon(fallbackIcon));
+        refreshIcons(box);
+    };
+
+    const showImage = (src) => {
+        const img = document.createElement('img');
+        img.alt = '';
+        img.decoding = 'async';
+        img.onerror = () => {
+            if (img.isConnected) showFallback();
+        };
+        img.src = src;
+        box.innerHTML = '';
+        box.appendChild(img);
+    };
+
+    showFallback();
+
+    return (value) => {
+        const next = typeof value === 'string' ? value.trim() : '';
+        if (next === lastValue) return;
+        lastValue = next;
+        generation += 1;
+        if (timer) clearTimeout(timer);
+        timer = null;
+        if (!next) {
+            showFallback();
+            return;
+        }
+
+        const mine = generation;
+        timer = setTimeout(async () => {
+            timer = null;
+            const resolved = await resolveLogoPreview(next);
+            if (mine !== generation) return;
+            if (resolved) showImage(resolved);
+            else showFallback();
+        }, LOGO_PREVIEW_DEBOUNCE_MS);
+    };
+}
+
+/** Logo, title and summary on the left; the caller fills the actions. */
+function buildCardHead(card, key, fallbackIcon) {
+    const head = el('div', 'ep-card-head');
+    const main = el('div', 'ep-card-head-main');
+    const logo = el('div', 'ep-card-logo');
+    const titles = el('div', 'ep-card-titles');
+    const titleRow = el('div', 'ep-card-title-row');
+    const title = el('span', 'ep-card-title');
+    const sub = el('span', 'ep-card-sub');
+    const actions = el('div', 'ep-card-actions');
+
+    titleRow.append(title, el('span', 'ep-badge', 'Inactive'));
+    titles.append(titleRow, sub);
+    main.append(logo, titles);
+    head.append(main, actions);
+
+    head.addEventListener('click', (e) => {
+        if (e.target.closest('button, input, label, textarea, select')) return;
+        toggleCard(card, key);
+    });
+
+    return { head, title, sub, actions, setLogo: createLogoPreview(logo, fallbackIcon) };
+}
+
+function appendCardControls(actions, card, key, removeTitle, onRemove) {
+    const chevron = buildIconButton('chevron-down', 'Show details', () => toggleCard(card, key));
+    chevron.classList.add('ep-chevron');
+    actions.append(chevron, buildIconButton('trash-2', removeTitle, onRemove, true));
+}
+
+/** Fades a card out, then drops its item from the list and re-renders. */
+function removeCard(card, getList, item, rerender) {
+    if (card.classList.contains('ep-card-removing')) return;
+    // The entrance animation pins opacity, so it has to go before the fade.
+    card.classList.remove('animate-fade-in-up');
+    card.classList.add('ep-card-removing');
+
+    setTimeout(() => {
+        const list = getList();
+        const idx = Array.isArray(list) ? list.indexOf(item) : -1;
+        if (idx > -1) list.splice(idx, 1);
+        expandedCards.delete(item);
+        rerender();
+    }, CARD_REMOVE_MS);
+}
+
+/** Scrolls a freshly added card into view and focuses its first field. */
+function focusLastCard(listId) {
+    const list = document.getElementById(listId);
+    const card = list ? list.lastElementChild : null;
+    if (!card || !card.classList.contains('ep-card')) return;
+    card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    const first = card.querySelector('.ep-card-body input');
+    if (first) first.focus({ preventScroll: true });
+}
+
+// ---------------------------------------------------------------------------
+// Endpoints
+// ---------------------------------------------------------------------------
 
 /** Coerces the cache-aware pruning fields on an endpoint to valid values. */
 function normalizeEndpointCacheFields(ep) {
@@ -93,17 +416,339 @@ function normalizeEndpointActiveField(ep) {
     ep.enabled = ep.enabled !== false;
 }
 
-/**
- * Dims an inactive card and shows its badge. The row itself runs a fade-in
- * animation that pins its opacity, so the children are dimmed instead.
- */
-function applyEndpointActiveState(row, isActive) {
-    if (!row) return;
-    const inactive = isActive === false;
-    row.classList.toggle('border-dashed', inactive);
-    Array.from(row.children).forEach(child => child.classList.toggle('opacity-60', inactive));
-    const badge = row.querySelector('.ep-inactive-badge');
-    if (badge) badge.classList.toggle('hidden', !inactive);
+function normalizeEndpoint(ep) {
+    normalizeEndpointCacheFields(ep);
+    normalizeEndpointActiveField(ep);
+    ep.stream = ep.stream !== false;
+    if (typeof ep.models === 'string') {
+        ep.models = ep.models.split(',').map(s => s.trim()).filter(Boolean);
+    } else if (!Array.isArray(ep.models)) {
+        ep.models = [];
+    }
+}
+
+function isEndpointIncomplete(ep) {
+    if (!ep || typeof ep !== 'object') return false;
+    return !String(ep.name || '').trim() || !String(ep.url || '').trim();
+}
+
+function endpointSummary(ep) {
+    const url = String(ep.url || '').trim();
+    const count = Array.isArray(ep.models) ? ep.models.length : 0;
+    const parts = [url || 'No URL yet', count > 0 ? plural(count, 'pinned model') : 'all models'];
+    if (ep.stream === false) parts.push('no streaming');
+    if (ep.prune_policy === PRUNE_POLICY_IMMEDIATE) parts.push('immediate prunes');
+    return parts.join(' · ');
+}
+
+function applyActiveState(card, ep) {
+    card.classList.toggle('ep-card-inactive', ep.enabled === false);
+}
+
+function renderStatus(node, result) {
+    const state = (result && typeof result.state === 'string') ? result.state : 'idle';
+    const latency = (result && Number.isFinite(result.latency)) ? Math.round(result.latency) : null;
+    const latencyText = latency !== null ? `${latency} ms` : 'OK';
+
+    let text = '';
+    let tip = '';
+    if (state === 'checking') {
+        text = 'Checking';
+        tip = 'Waiting for the endpoint to answer';
+    } else if (state === 'ok') {
+        text = latencyText;
+        tip = 'Responded in under a second';
+    } else if (state === 'slow') {
+        text = latencyText;
+        tip = 'Responded, but slower than one second';
+    } else if (state === 'fail') {
+        text = 'Failed';
+        tip = (result && result.error) || 'No response';
+    }
+
+    node.className = 'ep-status ep-status-' + state;
+    node.innerHTML = '';
+    node.append(el('span', 'ep-status-dot'), el('span', '', text));
+    node.title = tip;
+}
+
+async function probeEndpoint(ep, timeoutSec) {
+    try {
+        const res = await fetch('/v1/settings/check_endpoint', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: ep.url, api_key: ep.api_key, timeout: timeoutSec })
+        });
+        const data = await res.json();
+        return data;
+    } catch (e) {
+        return { ok: false, latency_ms: 0, error: e.message || 'Network check error' };
+    }
+}
+
+async function runEndpointCheck(ctx, button) {
+    const { ep } = ctx;
+    if (!String(ep.url || '').trim()) {
+        checkResults.set(ep, { state: 'fail', error: 'Enter a Base URL first' });
+        ctx.sync();
+        return;
+    }
+
+    button.disabled = true;
+    checkResults.set(ep, { state: 'checking' });
+    ctx.sync();
+    try {
+        const data = await probeEndpoint(ep, MANUAL_CHECK_TIMEOUT_SECONDS);
+        const latency = Number(data && data.latency_ms);
+        if (data && data.ok) {
+            checkResults.set(ep, { state: latency > SLOW_LATENCY_MS ? 'slow' : 'ok', latency });
+        } else {
+            checkResults.set(ep, { state: 'fail', latency, error: (data && data.error) || 'No response' });
+        }
+    } finally {
+        button.disabled = false;
+        ctx.sync();
+    }
+}
+
+function buildEndpointHead(ctx) {
+    const { ep, card } = ctx;
+    const parts = buildCardHead(card, ep, 'server');
+    const status = el('span', 'ep-status');
+
+    const check = buildIconButton('activity', 'Check the response time', (btn) => {
+        runEndpointCheck(ctx, btn).catch(e => console.error('Endpoint check failed', e));
+    });
+    const active = buildSwitch('Active', ep.enabled, (on) => {
+        ep.enabled = on;
+        applyActiveState(card, ep);
+    }, 'Active endpoints are pinged on save and supply models. Inactive ones keep their settings but are ignored.');
+
+    parts.actions.append(status, check, active);
+    appendCardControls(parts.actions, card, ep, 'Remove endpoint', () => {
+        removeCard(card, () => currentSettings.custom_endpoints, ep, renderSettingsEndpoints);
+    });
+
+    ctx.sync = () => {
+        parts.title.textContent = String(ep.name || '').trim() || 'Unnamed endpoint';
+        parts.sub.textContent = endpointSummary(ep);
+        parts.sub.title = parts.sub.textContent;
+        renderStatus(status, checkResults.get(ep));
+        parts.setLogo(ep.logo);
+    };
+    return parts.head;
+}
+
+function buildSecretInput(ep) {
+    const wrap = el('div', 'form-input-wrap');
+    const input = buildInput(ep.api_key, {
+        type: 'password',
+        placeholder: 'Optional, e.g. sk-...',
+        mono: true,
+        onInput: (value) => {
+            ep.api_key = value;
+        }
+    });
+
+    const toggle = el('button', 'form-input-btn');
+    toggle.type = 'button';
+    const paint = () => {
+        const shown = input.type === 'text';
+        toggle.innerHTML = '';
+        toggle.appendChild(icon(shown ? 'eye-off' : 'eye'));
+        toggle.title = shown ? 'Hide key' : 'Show key';
+        toggle.setAttribute('aria-label', toggle.title);
+        refreshIcons(toggle);
+    };
+    toggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        input.type = input.type === 'password' ? 'text' : 'password';
+        paint();
+    });
+    paint();
+
+    wrap.append(input, toggle);
+    return wrap;
+}
+
+function buildConnectionSection(ctx) {
+    const { ep } = ctx;
+    const name = buildInput(ep.name, {
+        placeholder: 'Local vLLM',
+        onInput: (value, input) => {
+            ep.name = value;
+            clearInvalid(input);
+            ctx.sync();
+        }
+    });
+    const url = buildInput(ep.url, {
+        placeholder: 'http://localhost:8000/v1',
+        mono: true,
+        onInput: (value, input) => {
+            ep.url = value;
+            clearInvalid(input);
+            // A result for the old URL would be misleading.
+            checkResults.delete(ep);
+            ctx.sync();
+        }
+    });
+    const logo = buildInput(ep.logo, {
+        placeholder: 'icons/local.svg or https://...',
+        mono: true,
+        onInput: (value) => {
+            ep.logo = value;
+            ctx.sync();
+        }
+    });
+    endpointFields.set(ep, { card: ctx.card, name, url });
+
+    const grid = el('div', 'form-grid');
+    grid.append(
+        buildField('Name', name),
+        buildField('Base URL', url),
+        buildField('API key', buildSecretInput(ep)),
+        buildField('Logo', logo, { hint: 'Image URL, local file or pasted SVG markup.' })
+    );
+    return buildSection('Connection', 'plug', [grid]);
+}
+
+function buildModelPill(modelId, onRemove) {
+    const pill = el('span', 'ep-pill');
+    const label = el('span', 'ep-pill-label', modelId);
+    label.title = modelId;
+
+    const remove = el('button', 'ep-pill-remove');
+    remove.type = 'button';
+    remove.title = 'Remove ' + modelId;
+    remove.setAttribute('aria-label', remove.title);
+    remove.appendChild(icon('x'));
+    remove.addEventListener('click', onRemove);
+
+    pill.append(label, remove);
+    return pill;
+}
+
+function buildModelsSection(ctx) {
+    const { ep } = ctx;
+    const pills = el('div', 'ep-pills');
+    const hint = el('p', 'form-hint');
+    const input = buildInput('', { placeholder: 'Add a model id, e.g. deepseek-ai/DeepSeek-V4-Flash', mono: true });
+    input.maxLength = MAX_MODEL_ID_CHARS;
+
+    const render = () => {
+        pills.innerHTML = '';
+        ep.models.forEach((modelId, mIdx) => {
+            pills.appendChild(buildModelPill(modelId, () => {
+                ep.models.splice(mIdx, 1);
+                render();
+            }));
+        });
+        const empty = ep.models.length === 0;
+        pills.classList.toggle('ep-pills-empty', empty);
+        hint.textContent = empty
+            ? 'None pinned, so every model the endpoint lists is offered.'
+            : 'Only the pinned models are offered, even if the endpoint lists more.';
+        ctx.sync();
+        refreshIcons(pills);
+    };
+
+    const addModel = () => {
+        const value = input.value.trim();
+        if (!value) return;
+        if (ep.models.includes(value) || ep.models.length >= MAX_PINNED_MODELS) {
+            input.select();
+            return;
+        }
+        ep.models.push(value);
+        input.value = '';
+        render();
+    };
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        addModel();
+    });
+
+    const add = el('button', 'btn-secondary');
+    add.type = 'button';
+    add.append(icon('plus'), el('span', '', 'Add'));
+    add.addEventListener('click', addModel);
+
+    const row = el('div', 'ep-model-add');
+    row.append(input, add);
+    render();
+    return buildSection('Models', 'list', [row, pills, hint]);
+}
+
+function buildBehaviourSection(ctx) {
+    const { ep } = ctx;
+    const stream = buildSwitch('Stream replies', ep.stream, (on) => {
+        ep.stream = on;
+        ctx.sync();
+    }, 'Show replies token by token in this web UI. External API clients are unaffected.');
+    const streamRow = el('div', 'ep-switch-row');
+    streamRow.append(stream, el('span', 'form-hint', 'When off, the chat page waits for the whole reply.'));
+
+    const policy = buildSegmented([
+        { value: PRUNE_POLICY_DEFERRED, label: 'Deferred', title: 'Cache-aware: hold new prunes while the prompt cache is warm' },
+        { value: PRUNE_POLICY_IMMEDIATE, label: 'Immediate', title: 'Apply prunes on the next send' }
+    ], ep.prune_policy, (value) => {
+        ep.prune_policy = value;
+        ctx.sync();
+    });
+
+    // Clamped on save, so a half-typed value is never fought mid-edit.
+    const ttl = buildInput(ep.cache_ttl_seconds, {
+        type: 'number',
+        min: MIN_CACHE_TTL_SECONDS,
+        max: MAX_CACHE_TTL_SECONDS,
+        step: 1,
+        mono: true,
+        onInput: (value) => {
+            ep.cache_ttl_seconds = parseInt(value, 10);
+        }
+    });
+
+    const grid = el('div', 'form-grid');
+    grid.append(
+        buildField('Prune policy', policy, {
+            hint: 'Deferred keeps the cached prefix intact. Use Immediate for token quotas that ignore caching.'
+        }),
+        buildField('Cache TTL (seconds)', ttl, {
+            hint: `How long the cache counts as warm, ${MIN_CACHE_TTL_SECONDS} to ${MAX_CACHE_TTL_SECONDS} s.`
+        })
+    );
+    return buildSection('Behaviour', 'sliders-horizontal', [streamRow, grid]);
+}
+
+function buildCardBody(sections) {
+    const body = el('div', 'ep-card-body');
+    const inner = el('div', 'ep-card-body-inner');
+    const content = el('div', 'ep-card-content');
+    sections.forEach(section => content.appendChild(section));
+    inner.appendChild(content);
+    body.appendChild(inner);
+    return body;
+}
+
+function buildEndpointCard(ep, index) {
+    normalizeEndpoint(ep);
+    const card = buildCardShell(index);
+    const ctx = { ep, card, sync: () => {} };
+
+    // The head is built first, because it defines ctx.sync for the sections.
+    card.appendChild(buildEndpointHead(ctx));
+    card.appendChild(buildCardBody([
+        buildConnectionSection(ctx),
+        buildModelsSection(ctx),
+        buildBehaviourSection(ctx)
+    ]));
+
+    applyActiveState(card, ep);
+    setCardOpen(card, ep, expandedCards.has(ep));
+    ctx.sync();
+    return card;
 }
 
 function renderSettingsEndpoints() {
@@ -111,247 +756,185 @@ function renderSettingsEndpoints() {
     if (!list) return;
     list.innerHTML = '';
 
-    const eps = currentSettings.custom_endpoints || [];
+    const eps = Array.isArray(currentSettings.custom_endpoints) ? currentSettings.custom_endpoints : [];
+    if (eps.length === 0) {
+        list.appendChild(buildEmptyState('server-off', 'No endpoints yet',
+            'Add an OpenAI-compatible server such as copilot-api, Ollama, vLLM or LM Studio.'));
+    }
     eps.forEach((ep, i) => {
-        const row = document.createElement('div');
-        row.className = 'flex flex-col gap-3 bg-gb-bgDarkest p-4 rounded-lg border border-gb-bgLight2 relative animate-fade-in-up transition-all duration-300 transform origin-top';
-        row.style.animationDelay = `${i * 0.05}s`;
-        row.setAttribute('data-ep-row', String(i));
-        row.innerHTML = `
-            <div class="flex flex-col xl:flex-row gap-3 w-full items-start xl:items-end">
-                <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 flex-1 w-full min-w-0">
-                    <div class="min-w-0">
-                        <label class="text-xs text-gb-fgDark font-semibold uppercase flex items-center gap-1.5">Name <span class="ep-inactive-badge hidden normal-case font-bold text-[10px] px-1.5 py-0.5 rounded bg-gb-bgLight2 text-gb-fgDark border border-gb-bgLight3">Inactive</span></label>
-                        <input type="text" class="w-full bg-gb-bg border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-2 py-1 mt-1" placeholder="Local vLLM" data-idx="${i}" data-field="name">
-                    </div>
-                    <div class="min-w-0">
-                        <label class="text-xs text-gb-fgDark font-semibold uppercase">Base URL</label>
-                        <input type="text" class="w-full bg-gb-bg border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-2 py-1 mt-1" placeholder="http://localhost:8000/v1" data-idx="${i}" data-field="url">
-                    </div>
-                    <div class="min-w-0">
-                        <label class="text-xs text-gb-fgDark font-semibold uppercase">API Key (Optional)</label>
-                        <input type="password" class="w-full bg-gb-bg border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-2 py-1 mt-1" placeholder="sk-..." data-idx="${i}" data-field="api_key">
-                    </div>
-                    <div class="min-w-0">
-                        <label class="text-xs text-gb-fgDark font-semibold uppercase">Logo (SVG / URL)</label>
-                        <input type="text" class="w-full bg-gb-bg border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-2 py-1 mt-1" placeholder="local.svg, /static/..., or URL" data-idx="${i}" data-field="logo">
-                    </div>
-                </div>
-                <div class="flex items-center gap-2 shrink-0 self-end xl:self-auto pb-0.5">
-                    <label class="flex items-center gap-1.5 text-xs font-semibold text-gb-fgLight cursor-pointer select-none whitespace-nowrap" title="Active endpoints are pinged on save and supply models. Inactive ones keep their URL, key and models but are ignored until switched back on.">
-                        <input type="checkbox" class="w-4 h-4 rounded border-gb-bgLight2 bg-gb-bgDarkest text-gb-blueAccent focus:ring-gb-blueAccent cursor-pointer" data-idx="${i}" data-field="enabled">
-                        Active
-                    </label>
-                    <label class="flex items-center gap-1.5 text-xs font-semibold text-gb-fgLight cursor-pointer select-none whitespace-nowrap" title="Stream replies token-by-token in this web UI. When off, the chat page waits for the full response. Does not affect external API clients.">
-                        <input type="checkbox" class="w-4 h-4 rounded border-gb-bgLight2 bg-gb-bgDarkest text-gb-blueAccent focus:ring-gb-blueAccent cursor-pointer" data-idx="${i}" data-field="stream">
-                        Stream
-                    </label>
-                    <button class="check-ep-btn bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-fgLight text-xs font-semibold px-2.5 py-1.5 rounded border border-gb-bgLight3 transition-all flex items-center gap-1.5 shadow-sm active:scale-95" data-idx="${i}" title="Check endpoint response time (< 1s)">
-                        <i data-lucide="activity" class="w-3.5 h-3.5 text-gb-blueAccent"></i> <span>Check</span>
-                    </button>
-                    <button class="text-gb-fgDark hover:text-gb-redAccent p-1 rounded transition-colors delete-ep-btn" data-idx="${i}" title="Remove Endpoint">
-                        <i data-lucide="trash-2" class="w-5 h-5"></i>
-                    </button>
-                </div>
-            </div>
-            <div id="check-status-${i}" class="hidden text-xs font-mono px-2.5 py-1 rounded border"></div>
-            <div class="w-full mt-1">
-                <label class="text-xs text-gb-fgDark font-semibold uppercase">Models (Optional)</label>
-                <div class="flex gap-2 mt-1">
-                    <input type="text" class="flex-1 bg-gb-bg border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-2 py-1" placeholder="Add model (e.g., deepseek-ai/DeepSeek-V4-Flash...)" id="model-input-${i}">
-                    <button class="bg-gb-bgLight2 hover:bg-gb-bgLight3 text-gb-fgLight font-bold px-3 py-1 rounded transition-colors flex items-center justify-center shrink-0 shadow-sm" id="add-model-btn-${i}" title="Add Model">
-                        <i data-lucide="plus" class="w-4 h-4 text-gb-aquaAccent"></i>
-                    </button>
-                </div>
-                <div id="models-list-${i}" class="flex flex-wrap gap-2 mt-3 empty:mt-0"></div>
-                <p class="text-[10.5px] text-gb-fgDark mt-2 font-medium">If empty, fetches all available models. If provided, forces these exact models to be available.</p>
-            </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full mt-1">
-                <div class="min-w-0">
-                    <label class="text-xs text-gb-fgDark font-semibold uppercase">Prune Policy</label>
-                    <select class="w-full bg-gb-bg border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-2 py-1 mt-1" data-idx="${i}" data-field="prune_policy">
-                        <option value="deferred">Deferred (cache-aware)</option>
-                        <option value="immediate">Immediate</option>
-                    </select>
-                </div>
-                <div class="min-w-0">
-                    <label class="text-xs text-gb-fgDark font-semibold uppercase">Cache TTL (seconds)</label>
-                    <input type="number" min="30" max="3600" step="1" class="w-full bg-gb-bg border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-2 py-1 mt-1" data-idx="${i}" data-field="cache_ttl_seconds">
-                </div>
-            </div>
-            <p class="text-[10.5px] text-gb-fgDark font-medium">Deferred holds new prunes back while this model's prompt cache is warm, so the cached prefix survives. They apply once the cache goes cold, on a model switch, near the context limit, or when you press Apply now. Use Immediate for token quotas that ignore caching.</p>
-        `;
-        row.querySelector('[data-field="name"]').value = ep.name || '';
-        row.querySelector('[data-field="url"]').value = ep.url || '';
-        row.querySelector('[data-field="api_key"]').value = ep.api_key || '';
-        row.querySelector('[data-field="logo"]').value = ep.logo || '';
-        ep.stream = ep.stream !== false;
-        row.querySelector('[data-field="stream"]').checked = ep.stream;
-        normalizeEndpointActiveField(ep);
-        row.querySelector('[data-field="enabled"]').checked = ep.enabled;
-        applyEndpointActiveState(row, ep.enabled);
-        normalizeEndpointCacheFields(ep);
-        row.querySelector('[data-field="prune_policy"]').value = ep.prune_policy;
-        row.querySelector('[data-field="cache_ttl_seconds"]').value = String(ep.cache_ttl_seconds);
-        list.appendChild(row);
+        if (ep && typeof ep === 'object') list.appendChild(buildEndpointCard(ep, i));
+    });
+    refreshIcons(list);
+}
 
-        const inputEl = document.getElementById(`model-input-${i}`);
-        const addBtn = document.getElementById(`add-model-btn-${i}`);
-        const modelsListEl = document.getElementById(`models-list-${i}`);
+/** Opens the first incomplete endpoint and outlines its empty fields. */
+function revealInvalidEndpoint(ep) {
+    switchSettingsPanel('endpoints');
+    const fields = endpointFields.get(ep);
+    if (!fields || !fields.card.isConnected) {
+        alert('All endpoints must have a Name and Base URL.');
+        return;
+    }
 
-        if (typeof ep.models === 'string') {
-            ep.models = ep.models.split(',').map(s => s.trim()).filter(Boolean);
-        } else if (!Array.isArray(ep.models)) {
-            ep.models = [];
+    setCardOpen(fields.card, ep, true);
+    const missing = [];
+    if (!String(ep.name || '').trim()) missing.push(fields.name);
+    if (!String(ep.url || '').trim()) missing.push(fields.url);
+    missing.forEach(input => {
+        input.classList.add(INVALID_CLASS);
+        input.setAttribute('aria-invalid', 'true');
+    });
+
+    fields.card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (missing.length > 0) missing[0].focus({ preventScroll: true });
+}
+
+export function addEndpoint() {
+    if (!Array.isArray(currentSettings.custom_endpoints)) currentSettings.custom_endpoints = [];
+    const ep = {
+        name: '',
+        url: '',
+        api_key: '',
+        logo: '',
+        models: [],
+        enabled: true,
+        stream: true,
+        prune_policy: PRUNE_POLICY_DEFERRED,
+        cache_ttl_seconds: clampCacheTtl(null)
+    };
+    currentSettings.custom_endpoints.push(ep);
+    expandedCards.add(ep);
+    renderSettingsEndpoints();
+    focusLastCard('endpoints-list');
+}
+
+// ---------------------------------------------------------------------------
+// Provider (picture) groups
+// ---------------------------------------------------------------------------
+
+function isSvgMarkup(value) {
+    const s = typeof value === 'string' ? value.trim() : '';
+    return s.startsWith('<svg') || s.startsWith('<?xml');
+}
+
+function normalizeProviderGroup(group) {
+    if (typeof group.keywords === 'string') {
+        group.keywords = group.keywords.split(',').map(s => s.trim()).filter(Boolean);
+    } else if (!Array.isArray(group.keywords)) {
+        group.keywords = [];
+    }
+}
+
+function providerSummary(group) {
+    const id = String(group.id || '').trim() || 'no id';
+    const keywords = Array.isArray(group.keywords) ? group.keywords : [];
+    return keywords.length > 0 ? `${id} · ${keywords.join(', ')}` : `${id} · no keywords`;
+}
+
+/** Logo field with a Path / URL versus Raw SVG selector; repaints in place. */
+function buildLogoEditor(group, ctx) {
+    const holder = el('div', 'form-field form-field-wide');
+
+    const paint = () => {
+        holder.innerHTML = '';
+        const svgMode = isSvgMarkup(group.logo);
+
+        const mode = buildSegmented([
+            { value: 'path', label: 'Path / URL' },
+            { value: 'svg', label: 'Raw SVG' }
+        ], svgMode ? 'svg' : 'path', (next) => {
+            if ((next === 'svg') === isSvgMarkup(group.logo)) return;
+            group.logo = next === 'svg' ? DEFAULT_SVG_LOGO : '';
+            ctx.sync();
+            paint();
+        });
+
+        const input = buildInput(group.logo, {
+            multiline: svgMode,
+            mono: true,
+            placeholder: svgMode ? '<svg ...>...</svg>' : 'icons/llama.svg, /static/icons/logo.svg or https://...',
+            onInput: (value) => {
+                group.logo = value;
+                ctx.sync();
+            }
+        });
+        fieldIdCounter += 1;
+        input.id = 'settings-field-' + fieldIdCounter;
+
+        const head = el('div', 'ep-field-head');
+        const label = el('label', 'form-label', 'Logo');
+        label.htmlFor = input.id;
+        head.append(label, mode);
+
+        const hint = svgMode
+            ? 'Pasted markup is stored as is.'
+            : 'An image URL, a file in the project or data folder, or a path under /static/.';
+        holder.append(head, input, el('span', 'form-hint', hint));
+    };
+
+    paint();
+    return holder;
+}
+
+function buildProviderSection(ctx) {
+    const { group } = ctx;
+    const name = buildInput(group.name, {
+        placeholder: 'Meta Llama',
+        onInput: (value) => {
+            group.name = value;
+            ctx.sync();
         }
-
-        const renderPills = () => {
-            modelsListEl.innerHTML = '';
-            ep.models.forEach((m, mIdx) => {
-                const pill = document.createElement('div');
-                pill.className = 'flex items-center gap-1 bg-gb-bg border border-gb-bgLight3 rounded pl-2 pr-1 py-1 text-xs font-mono text-gb-fgLight animate-fade-in-up';
-                pill.innerHTML = `
-                    <span class="truncate max-w-[200px]" title="${m}">${m}</span>
-                    <button class="text-gb-fgDark hover:text-gb-redAccent rounded hover:bg-gb-bgLight2 p-0.5 transition-colors" title="Remove">
-                        <i data-lucide="minus" class="w-3.5 h-3.5"></i>
-                    </button>
-                `;
-                pill.querySelector('button').onclick = () => {
-                    ep.models.splice(mIdx, 1);
-                    renderPills();
-                };
-                modelsListEl.appendChild(pill);
-            });
-            lucide.createIcons();
-        };
-
-        const addModel = () => {
-            const val = inputEl.value.trim();
-            if (val && !ep.models.includes(val)) {
-                ep.models.push(val);
-                inputEl.value = '';
-                renderPills();
-            }
-        };
-
-        addBtn.onclick = addModel;
-        inputEl.onkeydown = (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                addModel();
-            }
-        };
-
-        renderPills();
     });
-
-    list.querySelectorAll('.check-ep-btn').forEach(btn => {
-        btn.onclick = async () => {
-            const idx = Number(btn.getAttribute('data-idx'));
-            const ep = currentSettings.custom_endpoints[idx];
-            const statusDiv = document.getElementById(`check-status-${idx}`);
-            const origHtml = btn.innerHTML;
-
-            btn.disabled = true;
-            btn.innerHTML = '<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin text-gb-blueAccent"></i> <span>Checking...</span>';
-            lucide.createIcons();
-
-            if (statusDiv) {
-                statusDiv.className = 'text-xs font-mono px-2.5 py-1 rounded border bg-gb-bgLight1/50 border-gb-bgLight3 text-gb-fgDark flex items-center gap-2';
-                statusDiv.innerHTML = '<i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> Ping in progress...';
-                statusDiv.classList.remove('hidden');
-                lucide.createIcons();
-            }
-
-            try {
-                const res = await fetch('/v1/settings/check_endpoint', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: ep.url, api_key: ep.api_key })
-                });
-                const data = await res.json();
-                if (statusDiv) {
-                    if (data.ok && data.latency_ms <= 1000) {
-                        statusDiv.className = 'text-xs font-mono px-2.5 py-1 rounded border bg-gb-green/20 border-gb-greenAccent/40 text-gb-greenAccent flex items-center gap-2';
-                        statusDiv.innerHTML = `<i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> <span>Responded in <b>${data.latency_ms}ms</b> (OK &lt; 1s)</span>`;
-                    } else if (data.ok) {
-                        statusDiv.className = 'text-xs font-mono px-2.5 py-1 rounded border bg-gb-red/20 border-gb-redAccent/40 text-gb-redAccent flex items-center gap-2';
-                        statusDiv.innerHTML = `<i data-lucide="clock-alert" class="w-3.5 h-3.5"></i> <span>Slow response: <b>${data.latency_ms}ms</b> (exceeds 1s threshold)</span>`;
-                    } else {
-                        statusDiv.className = 'text-xs font-mono px-2.5 py-1 rounded border bg-gb-red/20 border-gb-redAccent/40 text-gb-redAccent flex items-center gap-2';
-                        statusDiv.innerHTML = `<i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i> <span>Failed (${data.error || 'No response'} &middot; ${data.latency_ms}ms)</span>`;
-                    }
-                }
-            } catch (e) {
-                if (statusDiv) {
-                    statusDiv.className = 'text-xs font-mono px-2.5 py-1 rounded border bg-gb-red/20 border-gb-redAccent/40 text-gb-redAccent flex items-center gap-2';
-                    statusDiv.innerHTML = `<i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i> <span>Check error: ${e.message}</span>`;
-                }
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = origHtml;
-                lucide.createIcons();
-            }
-        };
-    });
-
-    list.querySelectorAll('.delete-ep-btn').forEach(btn => {
-        btn.onclick = () => {
-            btn.disabled = true;
-            const epObj = currentSettings.custom_endpoints[Number(btn.getAttribute('data-idx'))];
-            const row = btn.closest('.animate-fade-in-up');
-            
-            row.classList.remove('animate-fade-in-up');
-            row.classList.add('opacity-0', 'scale-95', '-translate-y-2');
-            
-            setTimeout(() => {
-                const realIdx = currentSettings.custom_endpoints.indexOf(epObj);
-                if (realIdx > -1) {
-                    currentSettings.custom_endpoints.splice(realIdx, 1);
-                    renderSettingsEndpoints();
-                }
-            }, 300);
-        };
-    });
-
-    list.querySelectorAll('input[data-field]').forEach(inp => {
-        const idx = Number(inp.getAttribute('data-idx'));
-        const field = inp.getAttribute('data-field');
-        const ep = currentSettings.custom_endpoints[idx];
-        if (!ep || !field) return;
-
-        if (inp.type === 'checkbox') {
-            inp.onchange = (e) => {
-                ep[field] = e.target.checked;
-                // Repainted in place, so text typed into the card is never lost.
-                if (field === 'enabled') applyEndpointActiveState(inp.closest('[data-ep-row]'), ep.enabled);
-            };
-            return;
+    const id = buildInput(group.id, {
+        placeholder: 'llama',
+        mono: true,
+        onInput: (value) => {
+            group.id = value;
+            ctx.sync();
         }
-
-        if (field === 'cache_ttl_seconds') {
-            // Clamped on save, so a half-typed value is never fought mid-edit.
-            inp.oninput = (e) => {
-                ep[field] = parseInt(e.target.value, 10);
-            };
-            return;
+    });
+    const keywords = buildInput(group.keywords.join(', '), {
+        placeholder: 'llama, codellama',
+        onInput: (value) => {
+            group.keywords = value.split(',').map(s => s.trim()).filter(Boolean);
+            ctx.sync();
         }
-
-        inp.oninput = (e) => {
-            ep[field] = e.target.value;
-        };
     });
 
-    list.querySelectorAll('select[data-field]').forEach(sel => {
-        const ep = currentSettings.custom_endpoints[Number(sel.getAttribute('data-idx'))];
-        const field = sel.getAttribute('data-field');
-        if (!ep || !field) return;
-        sel.onchange = (e) => {
-            ep[field] = e.target.value;
-        };
-    });
+    const grid = el('div', 'form-grid');
+    grid.append(
+        buildField('Display name', name),
+        buildField('Group id', id),
+        buildField('Keywords', keywords, {
+            wide: true,
+            hint: 'Comma-separated. Models whose id contains any of them are grouped under this picture.'
+        }),
+        buildLogoEditor(group, ctx)
+    );
+    return buildSection('Picture group', 'image', [grid]);
+}
 
-    lucide.createIcons();
+function buildProviderCard(group, index) {
+    normalizeProviderGroup(group);
+    const card = buildCardShell(index);
+    const ctx = { group, card, sync: () => {} };
+    const parts = buildCardHead(card, group, 'image');
+
+    appendCardControls(parts.actions, card, group, 'Remove picture group', () => {
+        removeCard(card, () => currentSettings.providers, group, renderSettingsProviderGroups);
+    });
+    ctx.sync = () => {
+        parts.title.textContent = String(group.name || '').trim() || 'Unnamed group';
+        parts.sub.textContent = providerSummary(group);
+        parts.sub.title = parts.sub.textContent;
+        parts.setLogo(group.logo);
+    };
+
+    card.appendChild(parts.head);
+    card.appendChild(buildCardBody([buildProviderSection(ctx)]));
+    setCardOpen(card, group, expandedCards.has(group));
+    ctx.sync();
+    return card;
 }
 
 export function renderSettingsProviderGroups() {
@@ -359,156 +942,29 @@ export function renderSettingsProviderGroups() {
     if (!list) return;
     list.innerHTML = '';
 
-    const providers = currentSettings.providers || [];
-    providers.forEach((group, idx) => {
-        const row = document.createElement('div');
-        row.className = 'flex flex-col gap-3 bg-gb-bgDarkest p-4 rounded-lg border border-gb-bgLight2 relative animate-fade-in-up';
-        row.id = `group-row-${idx}`;
-
-        const isPastingSvg = typeof group.logo === 'string' && (group.logo.trim().startsWith('<svg') || group.logo.trim().startsWith('<?xml'));
-        const keywordsStr = Array.isArray(group.keywords) ? group.keywords.join(', ') : (group.keywords || '');
-
-        row.innerHTML = `
-            <div class="flex flex-col sm:flex-row gap-3 w-full items-start sm:items-center">
-                <div class="w-11 h-11 rounded-full flex items-center justify-center shrink-0 group-preview-box-${idx}">
-                    <img src="" alt="Logo" class="provider-logo provider-logo-xl group-preview-img-${idx} hidden">
-                    <i data-lucide="image" class="w-5 h-5 text-gb-bgLight3 group-preview-placeholder-${idx}"></i>
-                </div>
-                <div class="w-40">
-                    <label class="text-xs text-gb-fgDark font-semibold uppercase">Group ID</label>
-                    <input type="text" class="w-full bg-gb-bg border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-2 py-1 mt-1 font-mono" placeholder="llama" data-gidx="${idx}" data-gfield="id">
-                </div>
-                <div class="flex-1 w-full">
-                    <label class="text-xs text-gb-fgDark font-semibold uppercase">Display Name</label>
-                    <input type="text" class="w-full bg-gb-bg border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-2 py-1 mt-1" placeholder="Meta Llama" data-gidx="${idx}" data-gfield="name">
-                </div>
-                <div class="flex items-center gap-2 mt-4 sm:mt-5 shrink-0 self-end sm:self-auto">
-                    <button type="button" class="toggle-svg-paste-btn bg-gb-bgLight1 hover:bg-gb-bgLight2 text-gb-fgLight text-xs font-semibold px-2.5 py-1.5 rounded border border-gb-bgLight3 transition-all flex items-center gap-1 shadow-sm active:scale-95" data-gidx="${idx}" title="Toggle between URL/path and raw SVG paste">
-                        <i data-lucide="code" class="w-3.5 h-3.5 text-gb-aquaAccent"></i> <span>${isPastingSvg ? 'Path / URL' : 'Paste SVG'}</span>
-                    </button>
-                    <button type="button" class="text-gb-fgDark hover:text-gb-redAccent p-1 rounded transition-colors delete-group-btn" data-gidx="${idx}" title="Remove Group">
-                        <i data-lucide="trash-2" class="w-5 h-5"></i>
-                    </button>
-                </div>
-            </div>
-
-            <div class="w-full">
-                <label class="text-xs text-gb-fgDark font-semibold uppercase">Keywords (Comma-separated)</label>
-                <input type="text" class="w-full bg-gb-bg border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-2 py-1 mt-1" placeholder="llama, codellama" data-gidx="${idx}" data-gfield="keywords">
-                <p class="text-[10px] text-gb-fgDark mt-1">Models matching any of these keywords will be sorted under this picture.</p>
-            </div>
-
-            <div class="w-full group-logo-input-wrap-${idx}">
-                <div class="flex justify-between items-center mb-1">
-                    <label class="text-xs text-gb-fgDark font-semibold uppercase logo-field-label-${idx}">${isPastingSvg ? 'Raw SVG Markup' : 'Image URL / Local SVG File'}</label>
-                </div>
-                ${isPastingSvg ? `
-                    <textarea class="w-full bg-gb-bg border border-gb-bgLight2 text-gb-fgLight text-xs font-mono rounded focus:ring-1 focus:ring-gb-blueAccent outline-none p-2 resize-y h-24" placeholder="<svg ...>...</svg>" data-gidx="${idx}" data-gfield="logo-raw"></textarea>
-                ` : `
-                    <input type="text" class="w-full bg-gb-bg border border-gb-bgLight2 text-gb-fgLight text-sm rounded focus:ring-1 focus:ring-gb-blueAccent outline-none px-2 py-1 font-mono" placeholder="icons/llama.svg, /static/icons/logo.svg, or https://..." data-gidx="${idx}" data-gfield="logo-path">
-                `}
-            </div>
-        `;
-
-        row.querySelector('[data-gfield="id"]').value = group.id || '';
-        row.querySelector('[data-gfield="name"]').value = group.name || '';
-        row.querySelector('[data-gfield="keywords"]').value = keywordsStr;
-        
-        const logoInput = row.querySelector('[data-gfield="logo-raw"]') || row.querySelector('[data-gfield="logo-path"]');
-        if (logoInput) logoInput.value = group.logo || '';
-
-        list.appendChild(row);
-
-        const updatePreview = async (val) => {
-            const imgEl = row.querySelector(`.group-preview-img-${idx}`);
-            const phEl = row.querySelector(`.group-preview-placeholder-${idx}`);
-            if (!imgEl || !phEl) return;
-            if (!val || !val.trim()) {
-                imgEl.classList.add('hidden');
-                phEl.classList.remove('hidden');
-                return;
-            }
-            const resolved = await resolveLogoPreview(val);
-            if (resolved) {
-                imgEl.src = resolved;
-                imgEl.classList.remove('hidden');
-                phEl.classList.add('hidden');
-                imgEl.onerror = () => {
-                    imgEl.classList.add('hidden');
-                    phEl.classList.remove('hidden');
-                };
-            } else {
-                imgEl.classList.add('hidden');
-                phEl.classList.remove('hidden');
-            }
-        };
-
-        updatePreview(group.logo);
-
-        if (logoInput) {
-            logoInput.oninput = (e) => {
-                group.logo = e.target.value;
-                if (groupPreviewTimers[idx]) clearTimeout(groupPreviewTimers[idx]);
-                groupPreviewTimers[idx] = setTimeout(() => updatePreview(group.logo), 200);
-            };
-        }
+    const groups = Array.isArray(currentSettings.providers) ? currentSettings.providers : [];
+    if (groups.length === 0) {
+        list.appendChild(buildEmptyState('image-off', 'No picture groups',
+            'Add one to give models a logo by matching keywords in their ids.'));
+    }
+    groups.forEach((group, i) => {
+        if (group && typeof group === 'object') list.appendChild(buildProviderCard(group, i));
     });
-
-    list.querySelectorAll('.toggle-svg-paste-btn').forEach(btn => {
-        btn.onclick = () => {
-            const idx = Number(btn.getAttribute('data-gidx'));
-            const group = currentSettings.providers[idx];
-            if (!group) return;
-            const isCurrentlySvg = typeof group.logo === 'string' && (group.logo.trim().startsWith('<svg') || group.logo.trim().startsWith('<?xml'));
-            if (isCurrentlySvg) {
-                group.logo = '';
-            } else {
-                group.logo = '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>';
-            }
-            renderSettingsProviderGroups();
-        };
-    });
-
-    list.querySelectorAll('.delete-group-btn').forEach(btn => {
-        btn.onclick = () => {
-            const idx = Number(btn.getAttribute('data-gidx'));
-            if (currentSettings.providers && currentSettings.providers[idx]) {
-                currentSettings.providers.splice(idx, 1);
-                renderSettingsProviderGroups();
-            }
-        };
-    });
-
-    list.querySelectorAll('input[data-gfield]').forEach(inp => {
-        const idx = Number(inp.getAttribute('data-gidx'));
-        const field = inp.getAttribute('data-gfield');
-        const group = currentSettings.providers[idx];
-        if (!group) return;
-        inp.oninput = (e) => {
-            if (field === 'keywords') {
-                group.keywords = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
-            } else if (field === 'id') {
-                group.id = e.target.value;
-            } else if (field === 'name') {
-                group.name = e.target.value;
-            }
-        };
-    });
-
-    lucide.createIcons();
+    refreshIcons(list);
 }
 
 export function addProviderGroup() {
-    if (!currentSettings.providers) currentSettings.providers = [];
-    const newId = `group_${Date.now()}`;
-    currentSettings.providers.push({
-        id: newId,
-        name: 'New Provider',
-        keywords: ['model_keyword'],
-        logo: ''
-    });
+    if (!Array.isArray(currentSettings.providers)) currentSettings.providers = [];
+    const group = { id: `group_${Date.now()}`, name: '', keywords: [], logo: '' };
+    currentSettings.providers.push(group);
+    expandedCards.add(group);
     renderSettingsProviderGroups();
+    focusLastCard('provider-groups-list');
 }
+
+// ---------------------------------------------------------------------------
+// Display: theme and identity
+// ---------------------------------------------------------------------------
 
 function renderThemePicker() {
     const host = document.getElementById('setting-theme-picker');
@@ -600,6 +1056,10 @@ function readIdentityControls() {
     });
 }
 
+// ---------------------------------------------------------------------------
+// Dialog lifecycle
+// ---------------------------------------------------------------------------
+
 export async function openSettingsModal() {
     const modal = document.getElementById('settings-modal');
     const box = document.getElementById('settings-modal-box');
@@ -618,11 +1078,8 @@ export async function openSettingsModal() {
     renderThemePicker();
     populateIdentityControls();
 
-    const addGroupBtn = document.getElementById('add-provider-group-btn');
-    if (addGroupBtn && !addGroupBtn._wired) {
-        addGroupBtn._wired = true;
-        addGroupBtn.onclick = addProviderGroup;
-    }
+    // The Add Picture Group button is wired once in main.js. It used to be
+    // wired here as well, which added two groups per click.
 
     try {
         const res = await fetch('/v1/settings');
@@ -663,48 +1120,17 @@ export function closeSettingsModal() {
     box.classList.add('translate-y-8');
 }
 
-export function addEndpoint() {
-    if (!currentSettings.custom_endpoints) currentSettings.custom_endpoints = [];
-    currentSettings.custom_endpoints.push({
-        name: '',
-        url: '',
-        api_key: '',
-        logo: '',
-        models: [],
-        enabled: true,
-        stream: true,
-        prune_policy: PRUNE_POLICY_DEFERRED,
-        cache_ttl_seconds: clampCacheTtl(null)
-    });
-    renderSettingsEndpoints();
-}
-
-async function probeEndpoint(ep, timeoutSec) {
-    try {
-        const res = await fetch('/v1/settings/check_endpoint', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: ep.url, api_key: ep.api_key, timeout: timeoutSec })
-        });
-        const data = await res.json();
-        return data;
-    } catch (e) {
-        return { ok: false, latency_ms: 0, error: e.message || 'Network check error' };
-    }
-}
-
 export async function saveSettings() {
-    const endpoints = currentSettings.custom_endpoints || [];
-    for (const ep of endpoints) {
-        if (!ep.name || !ep.url) {
-            alert('All endpoints must have a Name and Base URL.');
-            return;
-        }
+    const endpoints = Array.isArray(currentSettings.custom_endpoints) ? currentSettings.custom_endpoints : [];
+    const incomplete = endpoints.find(isEndpointIncomplete);
+    if (incomplete) {
+        revealInvalidEndpoint(incomplete);
+        return;
     }
     endpoints.forEach(normalizeEndpointCacheFields);
     endpoints.forEach(normalizeEndpointActiveField);
     // Inactive endpoints are saved with everything else but never pinged.
-    const activeEndpoints = endpoints.filter(ep => ep.enabled !== false);
+    const activeEndpoints = endpoints.filter(ep => ep && ep.enabled !== false);
     const skippedCount = endpoints.length - activeEndpoints.length;
 
     // Reasoning budgets are configured in copilot-api's own settings.json.
@@ -749,7 +1175,7 @@ export async function saveSettings() {
                 setProviderStatus(idx, { state: 'checking', timeoutSec: timeoutVal });
                 const result = await probeEndpoint(ep, timeoutVal);
                 if (result.ok) {
-                    setProviderStatus(idx, { 
+                    setProviderStatus(idx, {
                         state: 'ok',
                         latency_ms: result.latency_ms
                     });
@@ -770,7 +1196,7 @@ export async function saveSettings() {
                         } : null
                     });
                     resolve(false);
-                };
+                }
             };
 
             await executeCheck(currentTimeout);
